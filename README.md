@@ -104,4 +104,3 @@ AI Usage Disclosure
 AI tools were used to assist with documentation drafting, architectural reasoning, and development planning. All code was written, reviewed, and integrated by the project author.
 
 MIT License
-MIT License
