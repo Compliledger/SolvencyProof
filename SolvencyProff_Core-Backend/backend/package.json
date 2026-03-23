@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "build:epoch": "npx tsx src/scripts/build-epoch.ts",
     "build:liabilities": "npx tsx src/liabilities-builder.ts",
     "scan:reserves": "npx tsx src/reserves-scanner.ts",
     "prove:solvency": "npx tsx src/solvency-prover.ts",

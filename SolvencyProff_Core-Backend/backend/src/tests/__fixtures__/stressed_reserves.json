@@ -1,0 +1,12 @@
+[
+  {
+    "source_id": "w1",
+    "amount": 100000,
+    "is_liquid": true
+  },
+  {
+    "source_id": "w2",
+    "amount": 400000,
+    "is_liquid": false
+  }
+]

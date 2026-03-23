@@ -1,0 +1,19 @@
+{
+  "entity_id": "compliledger-entity-01",
+  "epoch_id": 492858,
+  "liability_root": "0x12a6c652b822840bb6bd0f10232a97c528e687506aba06db6fab571c25fcda73",
+  "reserve_root": "0xf3f849288fdacb8b478f7a2fc5333e3b6c5ede8a226972ee408e4211fa4a5023",
+  "reserve_snapshot_hash": "0x1dbc17d9821c3ca9eb91346270a5e9f9e4eb96e24950f652e1976147f67ac0ad",
+  "reserves_total": 850000,
+  "total_liabilities": 300000,
+  "near_term_liabilities_total": 300000,
+  "liquid_assets_total": 500000,
+  "capital_backed": true,
+  "liquidity_ready": true,
+  "health_status": "HEALTHY",
+  "timestamp": 1774289226,
+  "valid_until": 1774292826,
+  "adapter_version": "algorand-adapter-v1",
+  "source_type": "backend",
+  "proof_hash": "0xf9d8c0a11fe823c8f3c5f396543f7bd1957813d85731a072986890e6aa38d366"
+}

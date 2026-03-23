@@ -1,64 +1,232 @@
 # SolvencyProof
-Private proof that assets exceed liabilities using zero-knowledge on Ethereum
 
-SolvencyProof is a privacy-first system that enables exchanges, stablecoin issuers, and financial protocols to cryptographically prove they are solvent—meaning total reserves exceed total liabilities—without revealing balances, users, or transaction data.
+**Continuous solvency and liquidity monitoring engine — Algorand MVP (Phase 2)**
 
-The project combines public onchain reserve verification with private liabilities commitments and a zero-knowledge solvency proof verified on Ethereum (Sepolia).
+SolvencyProof continuously verifies and enforces both **capital backing** and **liquidity readiness**, ensuring reserves exceed liabilities and sufficient liquid assets remain available to satisfy near-term obligations over time.
 
-Why SolvencyProof
-Blockchains are transparent by default. Anyone can see wallet balances, yet financial platforms still struggle to prove solvency without exposing sensitive customer and internal financial data.
-SolvencyProof solves this by enabling:
-Public verification of solvency
-Private customer balances
-No trust in centralized attestations
-Onchain cryptographic guarantees
+The backend is the canonical state engine. It generates rolling epoch objects that are prepared for submission to Algorand through the shared `compliledger-algorand-adapter`.
 
-What It Proves
-At a given snapshot (epoch), SolvencyProof proves:
-Σ(total reserves) ≥ Σ(total liabilities)
-This statement is verified using a zero-knowledge proof, ensuring that:
-Assets are publicly verifiable onchain
-Liabilities remain private
-Individual users can privately verify inclusion
+> ⚠️ **Phase 2 Architectural Shift**
+> - Phase 1 used Ethereum/Sepolia + ZK proofs (Groth16)
+> - Phase 2 targets **Algorand** as the registry chain for MVP
+> - The backend is now the source of truth, not the frontend
+> - Development order: **backend → Algorand integration → frontend**
 
-Architecture Overview
-Assets / Reserves
-Computed from publicly verifiable onchain reserve wallets
-Anyone can independently recompute totals
-Liabilities
-Ingested offchain (CSV for demo purposes)
-Committed to a Merkle tree
-Individual users receive private inclusion proofs
-Zero-Knowledge Proof
-A Circom circuit proves reserves ≥ liabilities
-No balances or identities are revealed
-Proof is verified onchain via Solidity verifier
-Onchain Verification
-Solidity verifier contract deployed on Ethereum Sepolia
-Emits an onchain solvency attestation event
-Frontend UI
-Admin flow to publish solvency proofs
-User flow to privately verify inclusion
-Public dashboard to verify solvency onchain
+---
+
+## What SolvencyProof Verifies
+
+| Check | Formula |
+|-------|---------|
+| **Capital Backing** | `reserves_total >= total_liabilities` |
+| **Liquidity Readiness** | `liquid_assets_total >= near_term_liabilities_total` |
+
+### Combined Health Status
+
+| `capital_backed` | `liquidity_ready` | Status |
+|-----------------|------------------|--------|
+| ✅ true | ✅ true | **HEALTHY** |
+| ✅ true | ❌ false | **LIQUIDITY_STRESSED** |
+| ❌ false | ✅ true | **UNDERCOLLATERALIZED** |
+| ❌ false | ❌ false | **CRITICAL** |
+
+---
+
+## Architecture Overview
+
+```
+data/liabilities.csv          data/reserves.json
+         │                             │
+         ▼                             ▼
+ connectors/liabilities_csv    connectors/reserves_json
+         │                             │
+         ▼                             ▼
+  engine/liability_tree       engine/reserve_snapshot
+         │                             │
+         └──────────┬──────────────────┘
+                    ▼
+          engine/health_status
+                    │
+                    ▼
+          engine/epoch_manager
+                    │
+                    ▼
+          engine/epoch_builder
+                    │
+                    ▼
+          proofs/proof_hash   (deterministic SHA-256 commitment)
+                    │
+                    ▼
+       algorand/adapter_payload
+                    │
+                    ▼
+    data/output/latest_epoch.json   ← ready for Algorand submission
+```
+
+---
+
+## Backend Module Structure
+
+```
+SolvencyProff_Core-Backend/
+  backend/src/
+    connectors/
+      liabilities_csv.ts    — parse + validate liabilities.csv
+      reserves_json.ts      — parse + validate reserves.json
+    engine/
+      epoch_manager.ts      — rolling epoch_id, timestamp, valid_until
+      liability_tree.ts     — Merkle root + totals from CSV (buildLiabilityState)
+      reserve_snapshot.ts   — Merkle root + snapshot hash from JSON (buildReserveState)
+      liquidity_evaluator.ts — evaluateLiquidityReadiness()
+      solvency_evaluator.ts  — evaluateCapitalBacking()
+      health_status.ts       — evaluateFinancialHealth() → four-state enum
+      epoch_builder.ts       — buildSolvencyEpochObject() end-to-end builder
+    proofs/
+      proof_schema.ts       — canonical field list for hashing
+      proof_hash.ts         — computeProofHash() (SHA-256 commitment)
+    algorand/
+      adapter_payload.ts    — toAlgorandSolvencyRegistryPayload()
+    types/
+      epoch.ts              — SolvencyEpochObject, LiabilityState, ReserveState
+      health.ts             — HealthStatus, HealthEvaluation
+      inputs.ts             — LiabilityEntry, ReserveEntry, EpochConfig
+    scripts/
+      build-epoch.ts        — CLI entrypoint
+    tests/
+      engine.test.ts        — unit tests for all new modules
+```
+
+---
+
+## Input File Formats
+
+**`data/liabilities.csv`** — liability entries
+
+```csv
+user_id,balance
+user_alice,150000
+user_bob,100000
+user_charlie,50000
+```
+
+**`data/reserves.json`** — reserve sources
+
+```json
+[
+  { "source_id": "wallet_1", "amount": 500000, "is_liquid": true },
+  { "source_id": "wallet_2", "amount": 350000, "is_liquid": false }
+]
+```
+
+> Connectors are designed to be replaced by API/webhook/stream sources without changing the engine.
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Node.js 18+
+- pnpm
+
+### Installation
+```bash
+git clone <repo-url>
+cd SolvencyProof/SolvencyProff_Core-Backend
+pnpm install
+```
+
+### Run the Epoch Builder (End-to-End)
+```bash
+pnpm build:epoch
+# or from backend directory:
+pnpm --filter @solvencyproof/backend build:epoch
+```
+
+**Example output:**
+```
+══════════════════════════════════════════════════
+  SolvencyProof — Backend Epoch Builder
+══════════════════════════════════════════════════
+
+  EPOCH SUMMARY
+──────────────────────────────────────────────────
+  Entity ID:              compliledger-entity-01
+  Epoch ID:               488968
+  Reserves Total:         850,000
+  Total Liabilities:      300,000
+  Liquid Assets Total:    500,000
+  Near-Term Liabilities:  300,000
+──────────────────────────────────────────────────
+  Capital Backed:         ✅ YES
+  Liquidity Ready:        ✅ YES
+  Health Status:          HEALTHY
+══════════════════════════════════════════════════
+
+✅ Payload written to: data/output/latest_epoch.json
+```
+
+### Run Tests
+```bash
+pnpm test
+```
+
+### Canonical Epoch Object Shape
+
+```typescript
+{
+  entity_id: string,
+  epoch_id: number,           // auto-generated, hourly bucket
+  liability_root: string,     // keccak256 Merkle root
+  reserve_root: string,       // keccak256 Merkle root
+  reserve_snapshot_hash: string, // SHA-256 of sorted reserves
+  proof_hash: string,         // SHA-256 deterministic commitment
+  reserves_total: number,
+  total_liabilities: number,
+  near_term_liabilities_total: number,
+  liquid_assets_total: number,
+  capital_backed: boolean,
+  liquidity_ready: boolean,
+  health_status: "HEALTHY" | "LIQUIDITY_STRESSED" | "UNDERCOLLATERALIZED" | "CRITICAL",
+  timestamp: number,          // Unix seconds
+  valid_until: number,        // Unix seconds
+  adapter_version: string,
+  source_type: "backend"
+}
+```
+
+---
+
+## Assumptions
+
+- `near_term_liabilities_total = total_liabilities` for now; structure supports future maturity bucketing
+- `proof_hash` is a SHA-256 commitment over canonical fields — not a ZK proof for this phase
+- Algorand on-chain submission is out of scope for Phase 2 MVP backend; the payload is written to disk
+- Frontend is not the source of truth; the backend epoch engine drives all state
+
+---
+
+## Remaining Phases
+
+| Phase | Description |
+|-------|-------------|
+| ✅ Backend | Continuous monitoring engine (this PR) |
+| 🔲 Algorand | Submit `latest_epoch.json` via `compliledger-algorand-adapter` |
+| 🔲 Frontend | Display live health status from backend |
+
+---
 
 Repository Layout
-/contracts        Solidity contracts + deployment scripts
-/circuits         Circom ZK circuits
-/backend          Proof + data tooling (TypeScript scripts)
-/app              Next.js frontend
-/data             Demo inputs (CSV / JSON)
+
+```
+/contracts        Solidity contracts (Phase 1 — kept for reference)
+/circuits         Circom ZK circuits (Phase 1 — kept for reference)
+/backend          Core monitoring engine (TypeScript) — Phase 2 source of truth
+/app              Next.js frontend (Phase 2 frontend TBD)
+/data             Input files (CSV / JSON) and output artifacts
 /scripts          Deployment & automation scripts
+```
 
-Tech Stack
-Blockchain: Ethereum (Sepolia)
-Smart Contracts: Solidity
-Zero-Knowledge: Circom + snarkjs (Groth16)
-Backend: Node.js / TypeScript
-Frontend: Next.js + wagmi / viem
-Merkle Trees: Poseidon or Keccak hashing
-Wallets: EVM-compatible wallets (MetaMask, etc.)
-
-Threat Model & Limitations
+---
 SolvencyProof does prove:
 Cryptographic solvency at a point in time
 Public ownership of reserve assets

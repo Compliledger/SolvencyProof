@@ -1,0 +1,17 @@
+[
+  {
+    "source_id": "w1",
+    "amount": 500,
+    "is_liquid": true
+  },
+  {
+    "source_id": "w2",
+    "amount": 300,
+    "is_liquid": false
+  },
+  {
+    "source_id": "w3",
+    "amount": 200,
+    "is_liquid": true
+  }
+]
