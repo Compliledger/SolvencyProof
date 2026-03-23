@@ -202,15 +202,18 @@ pnpm run test
 
 ```
 SolvencyProof/
-├── SolvencyProff_Core-Backend/   # Core evaluation engine, API, data pipeline
-│   ├── backend/                  # API layer and epoch evaluation logic
-│   ├── data/                     # Input and output data directories
-│   └── scripts/                  # Pipeline scripts
-└── Solvency-Proof-Frontend/      # Optional visibility layer (React dashboard)
+├── backend/      # Core evaluation engine, API, data pipeline
+│   ├── backend/  # API layer and epoch evaluation logic
+│   ├── data/     # Input and output data directories
+│   └── scripts/  # Pipeline scripts
+├── frontend/     # Optional visibility layer (React dashboard)
+├── algorand/     # Algorand adapter and on-chain integration
+├── docs/         # Documentation
+└── data/         # Shared data directory
 ```
 
 ---
 
 ## License
 
-See [LICENSE](./SolvencyProff_Core-Backend/LICENSE).
+See [LICENSE](./backend/LICENSE).
