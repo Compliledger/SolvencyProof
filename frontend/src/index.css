@@ -222,6 +222,53 @@
     border: 1px solid hsl(36 60% 50% / 0.2);
   }
 
+  /* Verification indicator badges */
+  .indicator-base {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+  }
+
+  .indicator-live-registry {
+    background: hsl(145 30% 45% / 0.12);
+    color: hsl(145 35% 55%);
+    border: 1px solid hsl(145 30% 45% / 0.2);
+  }
+
+  .indicator-fallback {
+    background: hsl(36 60% 50% / 0.12);
+    color: hsl(36 60% 60%);
+    border: 1px solid hsl(36 60% 50% / 0.2);
+  }
+
+  .indicator-unknown {
+    background: hsl(0 0% 50% / 0.10);
+    color: hsl(0 0% 60%);
+    border: 1px solid hsl(0 0% 50% / 0.18);
+  }
+
+  .indicator-fresh {
+    background: hsl(145 30% 45% / 0.12);
+    color: hsl(145 35% 55%);
+    border: 1px solid hsl(145 30% 45% / 0.2);
+  }
+
+  .indicator-expired {
+    background: hsl(0 45% 45% / 0.12);
+    color: hsl(0 45% 62%);
+    border: 1px solid hsl(0 45% 45% / 0.2);
+  }
+
+  .indicator-verified {
+    background: hsl(145 30% 45% / 0.12);
+    color: hsl(145 35% 55%);
+    border: 1px solid hsl(145 30% 45% / 0.2);
+  }
+
+  .indicator-failed {
+    background: hsl(0 45% 45% / 0.12);
+    color: hsl(0 45% 62%);
+    border: 1px solid hsl(0 45% 45% / 0.2);
+  }
+
   /* Primary button - confident, minimal */
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-medium transition-all duration-200;
