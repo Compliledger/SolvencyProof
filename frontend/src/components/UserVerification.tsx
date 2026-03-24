@@ -27,6 +27,7 @@ import {
 import { verifyUserInclusion, verifyStoredRecord } from "@/lib/api/backend";
 import { MOCK_USER_IDS } from "@/lib/api/mock";
 import type { UserInclusionResult, VerificationResult } from "@/lib/types";
+import { DataSourceBanner } from "@/components/DataSourceBanner";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -614,6 +615,18 @@ export default function UserVerification({
                                             </p>
                                         </div>
                                     </div>
+
+                                    {/* Data source + freshness banner */}
+                                    {recResult.record && (
+                                        <DataSourceBanner
+                                            dataSource={recResult.record.data_source}
+                                            isFresh={recResult.record.is_fresh}
+                                            isExpired={recResult.record.is_expired}
+                                            anchoredAt={recResult.record.anchored_at}
+                                            sourceType={recResult.record.source_type}
+                                            validUntil={recResult.record.valid_until}
+                                        />
+                                    )}
 
                                     {/* Mismatches */}
                                     {recResult.mismatches.length > 0 && (

@@ -10,6 +10,22 @@ export type HealthStatus =
     | "CRITICAL"
     | "EXPIRED";
 
+/**
+ * Indicates where the epoch state originated.
+ * - LIVE_REGISTRY  : read directly from the Algorand adapter / on-chain registry
+ * - FALLBACK_LOCAL : served from a file-based or cached fallback store
+ * - UNKNOWN        : source could not be determined
+ */
+export type DataSource = "LIVE_REGISTRY" | "FALLBACK_LOCAL" | "UNKNOWN";
+
+/**
+ * Freshness of an epoch record relative to the current time.
+ * - FRESH   : valid_until is in the future
+ * - EXPIRED : valid_until is in the past
+ * - UNKNOWN : validity window could not be determined
+ */
+export type FreshnessState = "FRESH" | "EXPIRED" | "UNKNOWN";
+
 export interface SolvencyEpochState {
     entity_id: string;
     epoch_id: number;
@@ -32,6 +48,21 @@ export interface SolvencyEpochState {
     anchored_at?: number;
     adapter_version?: string;
     source_type?: string;
+    /**
+     * Explicit data-source classification returned by the backend.
+     * When present this supersedes any client-side inference.
+     */
+    data_source?: DataSource;
+    /**
+     * Whether this epoch record is currently within its validity window.
+     * Provided by the backend; if absent the UI infers from valid_until.
+     */
+    is_fresh?: boolean | null;
+    /**
+     * Whether this epoch record has passed its valid_until timestamp.
+     * Provided by the backend; if absent the UI infers from valid_until.
+     */
+    is_expired?: boolean | null;
 }
 
 export type EpochHistoryItem = SolvencyEpochState;

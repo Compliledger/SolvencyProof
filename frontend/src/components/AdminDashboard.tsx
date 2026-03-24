@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { getLatestEpoch, triggerRefresh, submitToRegistry } from "@/lib/api/backend";
 import type { SolvencyEpochState, HealthStatus } from "@/lib/types";
+import { DataSourceBanner } from "@/components/DataSourceBanner";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -261,6 +262,17 @@ export default function AdminDashboard({ entityId }: AdminDashboardProps) {
                     {actionMsg}
                 </p>
             )}
+
+            {/* Data source + freshness banner */}
+            <DataSourceBanner
+                dataSource={epoch.data_source}
+                isFresh={epoch.is_fresh}
+                isExpired={epoch.is_expired}
+                anchoredAt={epoch.anchored_at}
+                sourceType={epoch.source_type}
+                validUntil={epoch.valid_until}
+                className="animate-fade-in"
+            />
 
             {/* Health status banner */}
             <SpotlightCard

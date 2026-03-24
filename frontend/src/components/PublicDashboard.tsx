@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { getLatestEpoch, getEpochHistory } from "@/lib/api/backend";
 import type { SolvencyEpochState, EpochHistoryItem, HealthStatus } from "@/lib/types";
+import { DataSourceBanner } from "@/components/DataSourceBanner";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -347,6 +348,15 @@ export default function PublicDashboard() {
 
                             <FreshnessBar
                                 timestamp={epoch.timestamp}
+                                validUntil={epoch.valid_until}
+                            />
+
+                            <DataSourceBanner
+                                dataSource={epoch.data_source}
+                                isFresh={epoch.is_fresh}
+                                isExpired={epoch.is_expired}
+                                anchoredAt={epoch.anchored_at}
+                                sourceType={epoch.source_type}
                                 validUntil={epoch.valid_until}
                             />
 
