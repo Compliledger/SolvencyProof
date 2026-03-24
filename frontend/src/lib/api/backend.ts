@@ -13,11 +13,16 @@ import type {
     SolvencyEpochState,
     EpochHistoryItem,
     UserInclusionResult,
+    VerificationResult,
+    HealthStatus,
 } from "../types";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/** source_type value used when falling back to on-chain contract endpoints. */
+const SOURCE_ON_CHAIN_FALLBACK = "on-chain-fallback" as const;
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -79,7 +84,7 @@ export async function getLatestEpoch(entityId?: string): Promise<SolvencyEpochSt
             health_status: proof.verified ? "HEALTHY" : "CRITICAL",
             timestamp: proof.timestamp,
             valid_until: proof.timestamp + 86400, // assume 24-hour validity
-            source_type: "on-chain-fallback",
+            source_type: SOURCE_ON_CHAIN_FALLBACK,
         } satisfies SolvencyEpochState;
     }
 }
@@ -133,7 +138,7 @@ export async function getEpochHistory(entityId: string): Promise<EpochHistoryIte
                             health_status: p.verified ? "HEALTHY" : "CRITICAL",
                             timestamp: p.timestamp,
                             valid_until: p.timestamp + 86400,
-                            source_type: "on-chain-fallback",
+                            source_type: SOURCE_ON_CHAIN_FALLBACK,
                         };
                     })
                     .catch(() => null)
@@ -221,4 +226,161 @@ export async function submitToRegistry(): Promise<{
         "/api/proof/submit",
         { method: "POST" }
     );
+}
+
+// ---------------------------------------------------------------------------
+// Registry-level reads (Algorand adapter)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch a specific epoch state by ID.
+ *
+ * @param entityId - entity identifier
+ * @param epochId  - the epoch number to retrieve
+ *
+ * TODO: backend should expose `GET /api/epoch/:epochId?entity_id=…`
+ */
+export async function getEpochRecord(
+    entityId: string,
+    epochId: number
+): Promise<SolvencyEpochState> {
+    try {
+        return await apiFetch<SolvencyEpochState>(
+            `/api/epoch/${epochId}?entity_id=${encodeURIComponent(entityId)}`
+        );
+    } catch {
+        // Fall back to the on-chain contract proof endpoint
+        const proof = await apiFetch<{
+            success: boolean;
+            epochId: string;
+            liabilitiesRoot: string;
+            reservesTotal: string;
+            timestamp: number;
+            verified: boolean;
+        }>(`/api/contracts/proof/${epochId}`);
+
+        const parsedId = parseInt(proof.epochId, 10);
+        return {
+            entity_id: entityId,
+            epoch_id: !Number.isNaN(parsedId) && parsedId > 0 ? parsedId : epochId,
+            liability_root: proof.liabilitiesRoot,
+            proof_hash: proof.liabilitiesRoot,
+            reserves_total: proof.reservesTotal,
+            near_term_liabilities_total: 0,
+            liquid_assets_total: 0,
+            capital_backed: proof.verified,
+            liquidity_ready: proof.verified,
+            health_status: proof.verified ? "HEALTHY" : "CRITICAL",
+            timestamp: proof.timestamp,
+            valid_until: proof.timestamp + 86400,
+            source_type: SOURCE_ON_CHAIN_FALLBACK,
+        } satisfies SolvencyEpochState;
+    }
+}
+
+/**
+ * Fetch the current health status for an entity.
+ *
+ * Returns the health status, entity ID, and epoch freshness timestamps.
+ * Derived from the latest epoch when a dedicated endpoint is not available.
+ *
+ * @param entityId - entity identifier
+ *
+ * TODO: backend should expose `GET /api/epoch/health?entity_id=…`
+ */
+export async function getHealthStatus(entityId: string): Promise<{
+    entity_id: string;
+    health_status: HealthStatus;
+    timestamp: number;
+    valid_until: number;
+}> {
+    try {
+        return await apiFetch<{
+            entity_id: string;
+            health_status: HealthStatus;
+            timestamp: number;
+            valid_until: number;
+        }>(`/api/epoch/health?entity_id=${encodeURIComponent(entityId)}`);
+    } catch {
+        // Derive from the latest epoch
+        const epoch = await getLatestEpoch(entityId);
+        return {
+            entity_id: epoch.entity_id,
+            health_status: epoch.health_status,
+            timestamp: epoch.timestamp,
+            valid_until: epoch.valid_until,
+        };
+    }
+}
+
+/**
+ * Verify that the Algorand registry record for a given entity + epoch matches
+ * the backend-computed state.
+ *
+ * @param entityId - entity identifier
+ * @param epochId  - epoch to verify
+ *
+ * TODO: backend should expose `GET /api/epoch/verify-stored?entity_id=…&epoch_id=…`
+ */
+export async function verifyStoredRecord(
+    entityId: string,
+    epochId: number
+): Promise<VerificationResult> {
+    try {
+        return await apiFetch<VerificationResult>(
+            `/api/epoch/verify-stored?entity_id=${encodeURIComponent(entityId)}&epoch_id=${epochId}`
+        );
+    } catch {
+        // Fall back: compare the on-chain contract proof against the backend epoch
+        try {
+            const [backendEpoch, onChainProof] = await Promise.all([
+                getEpochRecord(entityId, epochId),
+                apiFetch<{
+                    success: boolean;
+                    epochId: string;
+                    liabilitiesRoot: string;
+                    reservesTotal: string;
+                    timestamp: number;
+                    verified: boolean;
+                }>(`/api/contracts/proof/${epochId}`),
+            ]);
+
+            const mismatches: string[] = [];
+            if (
+                onChainProof.liabilitiesRoot &&
+                backendEpoch.liability_root &&
+                onChainProof.liabilitiesRoot !== backendEpoch.liability_root
+            ) {
+                mismatches.push("liability_root");
+            }
+            if (
+                onChainProof.reservesTotal !== undefined &&
+                backendEpoch.reserves_total !== undefined &&
+                onChainProof.reservesTotal !== String(backendEpoch.reserves_total)
+            ) {
+                mismatches.push("reserves_total");
+            }
+            if (
+                onChainProof.timestamp !== undefined &&
+                backendEpoch.timestamp !== undefined &&
+                onChainProof.timestamp !== backendEpoch.timestamp
+            ) {
+                mismatches.push("timestamp");
+            }
+
+            return {
+                exists: onChainProof.success,
+                matches: mismatches.length === 0,
+                mismatches,
+                record: backendEpoch,
+            } satisfies VerificationResult;
+        } catch {
+            return {
+                exists: false,
+                matches: false,
+                mismatches: [],
+                record: null,
+            } satisfies VerificationResult;
+        }
+    }
 }

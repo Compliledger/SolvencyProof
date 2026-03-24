@@ -395,6 +395,14 @@ export default function AdminDashboard({ entityId }: AdminDashboardProps) {
                             <dd>{epoch.adapter_version}</dd>
                         </div>
                     )}
+                    {epoch.anchored_at !== undefined && (
+                        <div>
+                            <dt className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                Anchored On-Chain
+                            </dt>
+                            <dd>{new Date(epoch.anchored_at * 1000).toLocaleString()}</dd>
+                        </div>
+                    )}
                     {epoch.source_type && (
                         <div>
                             <dt className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
