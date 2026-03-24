@@ -8,6 +8,7 @@ import type {
     SolvencyEpochState,
     EpochHistoryItem,
     UserInclusionResult,
+    VerificationResult,
     HealthStatus,
 } from "../types";
 
@@ -119,3 +120,44 @@ export function getMockUserInclusion(
 
 /** User IDs that are included in the mock liability tree. */
 export const MOCK_USER_IDS: string[] = [...MOCK_INCLUDED_USERS];
+
+// ---------------------------------------------------------------------------
+// Stored-record verification mock
+// ---------------------------------------------------------------------------
+
+/**
+ * Return a mock `VerificationResult` for a given entity + epoch.
+ * Simulates a successful match against the Algorand registry.
+ */
+export function getMockVerificationResult(
+    entityId?: string,
+    epochId = 42
+): Promise<VerificationResult> {
+    const record: SolvencyEpochState = {
+        entity_id: entityId ?? DEFAULT_ENTITY_ID,
+        epoch_id: epochId,
+        liability_root:
+            "0xabc123def456abc123def456abc123def456abc123def456abc123def456abc1",
+        reserve_root:
+            "0xdef456abc123def456abc123def456abc123def456abc123def456abc123def4",
+        proof_hash:
+            "0x111222333444555666777888999aaabbbcccdddeeefff000111222333444abc0",
+        reserves_total: 1_500_000,
+        near_term_liabilities_total: 800_000,
+        liquid_assets_total: 1_100_000,
+        capital_backed: true,
+        liquidity_ready: true,
+        health_status: "HEALTHY",
+        timestamp: Math.floor(Date.now() / 1000) - 3600,
+        valid_until: Math.floor(Date.now() / 1000) + 82800,
+        anchored_at: Math.floor(Date.now() / 1000) - 3500,
+        adapter_version: "1.0.0",
+        source_type: "mock",
+    };
+    return Promise.resolve({
+        exists: true,
+        matches: true,
+        mismatches: [],
+        record,
+    } satisfies VerificationResult);
+}
