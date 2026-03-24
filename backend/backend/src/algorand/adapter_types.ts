@@ -78,8 +78,52 @@ export interface AlgorandAdapterPayload {
   /** Unix timestamp (seconds) until which this epoch is considered fresh. */
   valid_until: number;
 
+  /**
+   * Unix timestamp (seconds) when this epoch state was anchored on-chain.
+   * Populated by the adapter from the confirmed Algorand transaction timestamp.
+   * Absent when the epoch has not yet been submitted to the registry.
+   */
+  anchored_at?: number;
+
+  /**
+   * Total liabilities in USD, serialised as a decimal string.
+   * Populated by the adapter from on-chain box storage when available.
+   */
+  total_liabilities?: string;
+
   /** Adapter schema version used to build this payload (e.g. "algorand-adapter-v1"). */
   adapter_version: string;
+}
+
+// ============================================================
+// HEALTH STATUS RESPONSE
+// ============================================================
+
+/**
+ * Health status payload returned by the adapter's getHealthStatus() method.
+ * Provides a condensed view without requiring the full epoch payload.
+ */
+export interface AdapterHealthStatus {
+  /** Entity identifier. */
+  entity_id: string;
+
+  /**
+   * Human-readable health status string.
+   * One of: "HEALTHY" | "LIQUIDITY_STRESSED" | "UNDERCOLLATERALIZED" | "CRITICAL" | "EXPIRED".
+   */
+  health_status: string;
+
+  /** True when health_status === "HEALTHY" and the epoch is still within its validity window. */
+  is_healthy: boolean;
+
+  /** True when the current time is before valid_until. */
+  is_fresh: boolean;
+
+  /** Unix timestamp (seconds) until which this epoch state is considered fresh. */
+  valid_until: number;
+
+  /** Unix timestamp (seconds) when this epoch was generated. */
+  timestamp: number;
 }
 
 // ============================================================

@@ -5,6 +5,8 @@ import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
 import { yellowNetwork as yellowClearNode } from "../services/yellow-network.js";
+import { createAlgorandAdapterClient } from "../algorand/adapter_client.js";
+import type { AlgorandAdapterPayload } from "../algorand/adapter_types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -891,6 +893,9 @@ app.post("/api/workflow/full", async (_req: Request, res: Response) => {
 // Epoch State Endpoints
 // ============================================
 
+// Module-level adapter client singleton — all epoch routes share this instance.
+const epochAdapterClient = createAlgorandAdapterClient();
+
 type EpochHealthStatus =
   | "HEALTHY"
   | "LIQUIDITY_STRESSED"
@@ -937,9 +942,59 @@ function parseEpochId(raw: unknown): number {
 }
 
 /**
- * Reads all available output files and assembles a NormalizedEpochState
- * for the given entity.  Returns null when the mandatory liabilities_root.json
- * has not been built yet.
+ * Converts an AlgorandAdapterPayload into the NormalizedEpochState shape
+ * expected by the frontend and epoch route handlers.
+ *
+ * anchored_at is taken directly from the adapter payload (on-chain anchor
+ * timestamp) rather than from local file metadata.
+ */
+function normalizeAdapterPayload(payload: AlgorandAdapterPayload): NormalizedEpochState {
+  const validStatuses: EpochHealthStatus[] = [
+    "HEALTHY",
+    "LIQUIDITY_STRESSED",
+    "UNDERCOLLATERALIZED",
+    "CRITICAL",
+    "EXPIRED",
+  ];
+  const healthStatus: EpochHealthStatus = validStatuses.includes(
+    payload.health_status as EpochHealthStatus
+  )
+    ? (payload.health_status as EpochHealthStatus)
+    : "CRITICAL";
+
+  return {
+    entity_id:                   payload.entity_id,
+    epoch_id:                    payload.epoch_id,
+    liability_root:              payload.liability_root,
+    reserve_root:                payload.reserve_root,
+    reserve_snapshot_hash:       payload.reserve_snapshot_hash,
+    proof_hash:                  payload.proof_hash,
+    reserves_total:              payload.reserves_total,
+    // total_liabilities is optional — absent when the adapter omits it from the on-chain record
+    total_liabilities:           payload.total_liabilities ?? undefined,
+    near_term_liabilities_total: payload.near_term_liabilities_total,
+    liquid_assets_total:         payload.liquid_assets_total,
+    capital_backed:              payload.capital_backed,
+    liquidity_ready:             payload.liquidity_ready,
+    health_status:               healthStatus,
+    timestamp:                   payload.timestamp,
+    valid_until:                 payload.valid_until,
+    // anchored_at is optional — absent when the epoch has not yet been submitted on-chain
+    anchored_at:                 payload.anchored_at ?? undefined,
+    adapter_version:             payload.adapter_version,
+    source_type:                 "algorand-adapter",
+  };
+}
+
+/**
+ * FALLBACK ONLY — Reads available output files and assembles a NormalizedEpochState
+ * for the given entity.
+ *
+ * This function is used as a fallback when the Algorand adapter client is
+ * unavailable or returns null. It is NOT the primary source of truth; the
+ * adapter-backed path should be preferred at all times.
+ *
+ * Returns null when the mandatory liabilities_root.json has not been built yet.
  */
 function buildEpochStateFromFiles(entityId: string): NormalizedEpochState | null {
   const liabRootPath  = path.join(OUTPUT_DIR, "liabilities_root.json");
@@ -1027,13 +1082,36 @@ function buildEpochStateFromFiles(entityId: string): NormalizedEpochState | null
 // ----------------------------------------------------------------
 
 // GET /api/epoch/health?entity_id=<entityId>
-app.get("/api/epoch/health", (req: Request, res: Response) => {
+app.get("/api/epoch/health", async (req: Request, res: Response) => {
   const entityId = req.query.entity_id as string | undefined;
   if (!entityId) {
     return res.status(400).json({ error: "entity_id query parameter is required" });
   }
 
   try {
+    // Primary: retrieve health status from the Algorand adapter (on-chain source of truth)
+    try {
+      const adapterHealth = await epochAdapterClient.getHealthStatus(entityId);
+      if (adapterHealth) {
+        return res.json({
+          entity_id:     adapterHealth.entity_id,
+          health_status: adapterHealth.health_status,
+          is_healthy:    adapterHealth.is_healthy,
+          is_fresh:      adapterHealth.is_fresh,
+          valid_until:   adapterHealth.valid_until,
+          timestamp:     adapterHealth.timestamp,
+          source_type:   "algorand-adapter",
+        });
+      }
+    } catch (adapterErr) {
+      console.warn(
+        `[epoch/health] Adapter failed for entity=${entityId}, falling back to file-based state:`,
+        adapterErr
+      );
+    }
+
+    // FALLBACK: read from local output files when adapter is unavailable or returned null
+    console.info(`[epoch/health] [FALLBACK] Using file-based state for entity=${entityId}`);
     const state = buildEpochStateFromFiles(entityId);
     if (!state) {
       return res.status(404).json({ error: "No epoch state found for entity", entity_id: entityId });
@@ -1084,9 +1162,7 @@ app.get("/api/epoch/verify-stored", async (req: Request, res: Response) => {
     }
 
     // Call the Algorand adapter to check what is stored on-chain
-    const { createAlgorandAdapterClient } = await import("../algorand/adapter_client.js");
-    const adapterClient = createAlgorandAdapterClient();
-    const adapterResult = await adapterClient.verifyStoredRecord(entityId, epochId);
+    const adapterResult = await epochAdapterClient.verifyStoredRecord(entityId, epochId);
 
     // exists: true when the adapter confirms an on-chain record OR when the
     // locally persisted epoch matches the requested ID (the epoch was generated
@@ -1108,9 +1184,24 @@ app.get("/api/epoch/verify-stored", async (req: Request, res: Response) => {
 });
 
 // GET /api/epoch/latest?entity_id=<entityId>
-app.get("/api/epoch/latest", (req: Request, res: Response) => {
+app.get("/api/epoch/latest", async (req: Request, res: Response) => {
   const entityId = (req.query.entity_id as string | undefined) ?? "default";
   try {
+    // Primary: retrieve latest state from the Algorand adapter (on-chain source of truth)
+    try {
+      const adapterState = await epochAdapterClient.getLatestState(entityId);
+      if (adapterState) {
+        return res.json(normalizeAdapterPayload(adapterState));
+      }
+    } catch (adapterErr) {
+      console.warn(
+        `[epoch/latest] Adapter failed for entity=${entityId}, falling back to file-based state:`,
+        adapterErr
+      );
+    }
+
+    // FALLBACK: read from local output files when adapter is unavailable or returned null
+    console.info(`[epoch/latest] [FALLBACK] Using file-based state for entity=${entityId}`);
     const state = buildEpochStateFromFiles(entityId);
     if (!state) {
       return res.status(404).json({ error: "No epoch state found — run the full workflow first" });
@@ -1123,11 +1214,25 @@ app.get("/api/epoch/latest", (req: Request, res: Response) => {
 });
 
 // GET /api/epoch/history?entity_id=<entityId>
-// Currently only the latest epoch is persisted to disk.
-// Returns a single-element array; historical epochs require a datastore.
-app.get("/api/epoch/history", (req: Request, res: Response) => {
+app.get("/api/epoch/history", async (req: Request, res: Response) => {
   const entityId = (req.query.entity_id as string | undefined) ?? "default";
   try {
+    // Primary: retrieve epoch history from the Algorand adapter (on-chain source of truth)
+    try {
+      const adapterHistory = await epochAdapterClient.getEpochHistory(entityId);
+      if (adapterHistory.length > 0) {
+        return res.json(adapterHistory);
+      }
+    } catch (adapterErr) {
+      console.warn(
+        `[epoch/history] Adapter failed for entity=${entityId}, falling back to file-based state:`,
+        adapterErr
+      );
+    }
+
+    // FALLBACK: read from local output files when adapter is unavailable or returned empty
+    // Only the latest epoch is persisted to disk; returns a single-element array.
+    console.info(`[epoch/history] [FALLBACK] Using file-based state for entity=${entityId}`);
     const state = buildEpochStateFromFiles(entityId);
     if (!state) {
       return res.json([]);
@@ -1146,52 +1251,64 @@ app.get("/api/epoch/:entityId", async (req: Request, res: Response) => {
   const rawEpochId = req.query.epochId as string | undefined;
 
   try {
-    const state = buildEpochStateFromFiles(entityId);
-
-    // When a specific epochId is requested, validate it matches
+    // When a specific epochId is requested, use getEpochRecord() on the adapter
     if (rawEpochId !== undefined) {
       const epochId = parseInt(rawEpochId, 10);
       if (Number.isNaN(epochId)) {
         return res.status(400).json({ error: "epochId must be a valid integer" });
       }
 
-      if (!state) {
-        // Try the Algorand adapter as a fallback
-        const { createAlgorandAdapterClient } = await import("../algorand/adapter_client.js");
-        const adapterClient = createAlgorandAdapterClient();
-        const adapterState  = await adapterClient.getLatestState(entityId);
-        if (!adapterState || adapterState.epoch_id !== epochId) {
-          return res.status(404).json({
-            error:    "Epoch not found",
-            entity_id: entityId,
-            epoch_id:  epochId,
-          });
+      // Primary: retrieve specific epoch record from the adapter
+      try {
+        const adapterRecord = await epochAdapterClient.getEpochRecord(entityId, epochId);
+        if (adapterRecord) {
+          return res.json(normalizeAdapterPayload(adapterRecord));
         }
-        // Normalise adapter payload into NormalizedEpochState shape
-        const now = Math.floor(Date.now() / 1000);
-        return res.json({
-          ...adapterState,
-          is_fresh: now <= adapterState.valid_until,
-          source_type: "algorand-adapter",
-        });
+      } catch (adapterErr) {
+        console.warn(
+          `[epoch/:entityId] Adapter getEpochRecord failed for entity=${entityId} epoch=${epochId}, falling back to file-based state:`,
+          adapterErr
+        );
       }
 
-      if (state.epoch_id !== epochId) {
+      // FALLBACK: check file-based state for the requested epochId
+      console.info(
+        `[epoch/:entityId] [FALLBACK] Using file-based state for entity=${entityId} epoch=${epochId}`
+      );
+      const fileState = buildEpochStateFromFiles(entityId);
+      if (!fileState || fileState.epoch_id !== epochId) {
         return res.status(404).json({
-          error:    "Epoch not found",
+          error:     "Epoch not found",
           entity_id: entityId,
           epoch_id:  epochId,
         });
       }
+      return res.json(fileState);
     }
 
+    // No specific epochId — return the latest state for the entity
+    // Primary: retrieve latest state from the adapter
+    try {
+      const adapterState = await epochAdapterClient.getLatestState(entityId);
+      if (adapterState) {
+        return res.json(normalizeAdapterPayload(adapterState));
+      }
+    } catch (adapterErr) {
+      console.warn(
+        `[epoch/:entityId] Adapter getLatestState failed for entity=${entityId}, falling back to file-based state:`,
+        adapterErr
+      );
+    }
+
+    // FALLBACK: read from local output files
+    console.info(`[epoch/:entityId] [FALLBACK] Using file-based state for entity=${entityId}`);
+    const state = buildEpochStateFromFiles(entityId);
     if (!state) {
       return res.status(404).json({
-        error:    "No epoch state found for entity — run the full workflow first",
+        error:     "No epoch state found for entity — run the full workflow first",
         entity_id: entityId,
       });
     }
-
     return res.json(state);
   } catch (err: unknown) {
     const error = err as Error;

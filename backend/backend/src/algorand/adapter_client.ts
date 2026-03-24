@@ -19,6 +19,7 @@
  */
 
 import type {
+  AdapterHealthStatus,
   AlgorandAdapterPayload,
   EpochHistoryEntry,
   SubmitEpochResult,
@@ -77,6 +78,45 @@ export interface IAlgorandAdapterClient {
     entityId: string,
     epochId: number
   ): Promise<VerifyStoredRecordResult>;
+
+  /**
+   * Retrieves a specific historical epoch record for an entity.
+   *
+   * @param entityId - Entity identifier
+   * @param epochId  - The epoch ID to retrieve
+   * @returns The epoch payload for the requested epoch, or null if not found
+   */
+  getEpochRecord(
+    entityId: string,
+    epochId: number
+  ): Promise<AlgorandAdapterPayload | null>;
+
+  /**
+   * Returns the condensed health status for an entity without fetching the
+   * full epoch payload.
+   *
+   * @param entityId - Entity identifier
+   * @returns Health status summary, or null if no state exists for the entity
+   */
+  getHealthStatus(entityId: string): Promise<AdapterHealthStatus | null>;
+
+  /**
+   * Returns whether the entity's latest epoch is in a HEALTHY state and
+   * within its validity window.
+   *
+   * @param entityId - Entity identifier
+   * @returns true when the latest state is HEALTHY and not yet expired
+   */
+  isHealthy(entityId: string): Promise<boolean>;
+
+  /**
+   * Returns whether the entity's latest epoch is still within its validity
+   * window (i.e. current time is before valid_until).
+   *
+   * @param entityId - Entity identifier
+   * @returns true when the latest state has not yet expired
+   */
+  isFresh(entityId: string): Promise<boolean>;
 }
 
 // ============================================================
@@ -143,6 +183,42 @@ export class AlgorandAdapterStub implements IAlgorandAdapterClient {
       message:
         "Adapter stub: verification not available until @compliledger/algorand-adapter is integrated.",
     };
+  }
+
+  async getEpochRecord(
+    entityId: string,
+    epochId: number
+  ): Promise<AlgorandAdapterPayload | null> {
+    // TODO: Forward to compliledger-algorand-adapter's getEpochRecord()
+    console.warn(
+      "[AlgorandAdapterStub] getEpochRecord called — adapter not yet connected. " +
+        `entity_id=${entityId} epoch_id=${epochId}`
+    );
+    return null;
+  }
+
+  async getHealthStatus(entityId: string): Promise<AdapterHealthStatus | null> {
+    // TODO: Forward to compliledger-algorand-adapter's getHealthStatus()
+    console.warn(
+      `[AlgorandAdapterStub] getHealthStatus called — adapter not yet connected. entity_id=${entityId}`
+    );
+    return null;
+  }
+
+  async isHealthy(entityId: string): Promise<boolean> {
+    // TODO: Forward to compliledger-algorand-adapter's isHealthy()
+    console.warn(
+      `[AlgorandAdapterStub] isHealthy called — adapter not yet connected. entity_id=${entityId}`
+    );
+    return false;
+  }
+
+  async isFresh(entityId: string): Promise<boolean> {
+    // TODO: Forward to compliledger-algorand-adapter's isFresh()
+    console.warn(
+      `[AlgorandAdapterStub] isFresh called — adapter not yet connected. entity_id=${entityId}`
+    );
+    return false;
   }
 }
 
