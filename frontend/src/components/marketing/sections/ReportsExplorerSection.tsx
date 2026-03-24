@@ -1,14 +1,99 @@
 import { useState } from "react";
 import { mockReports, coverageRatio } from "@/lib/mock/reports";
 import { formatRatio, formatUsd } from "@/lib/format";
+import type { ReportStatus, ReportDataSource } from "@/lib/mock/reports";
 
-function StatusBadge({ status }: { status: string }) {
-  const isVerified = status === "Verified";
+function DataSourceBadge({ source }: { source?: ReportDataSource }) {
+  switch (source) {
+    case "LIVE_REGISTRY":
+      return (
+        <span className="indicator-base indicator-live-registry">
+          <span className="h-1.5 w-1.5 rounded-full bg-success" />
+          Live Registry
+        </span>
+      );
+    case "FALLBACK_LOCAL":
+      return (
+        <span className="indicator-base indicator-fallback">
+          <span className="h-1.5 w-1.5 rounded-full bg-warning" />
+          Fallback
+        </span>
+      );
+    default:
+      return (
+        <span className="indicator-base indicator-unknown">
+          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+          Unknown
+        </span>
+      );
+  }
+}
+
+function FreshnessBadge({ isFresh }: { isFresh?: boolean }) {
+  if (isFresh === true) {
+    return (
+      <span className="indicator-base indicator-fresh">
+        <span className="h-1.5 w-1.5 rounded-full bg-success" />
+        Fresh
+      </span>
+    );
+  }
+  if (isFresh === false) {
+    return (
+      <span className="indicator-base indicator-expired">
+        <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+        Expired
+      </span>
+    );
+  }
   return (
-    <span className={isVerified ? "status-verified" : "status-pending"}>
-      <span className={`h-1.5 w-1.5 rounded-full ${isVerified ? "bg-success" : "bg-warning"}`} />
+    <span className="indicator-base indicator-unknown">
+      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
+      Unknown
+    </span>
+  );
+}
+
+function VerificationBadge({ status }: { status: ReportStatus }) {
+  if (status === "Verified") {
+    return (
+      <span className="indicator-base indicator-verified">
+        <span className="h-1.5 w-1.5 rounded-full bg-success" />
+        Verified
+      </span>
+    );
+  }
+  if (status === "Failed") {
+    return (
+      <span className="indicator-base indicator-failed">
+        <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+        Failed
+      </span>
+    );
+  }
+  return (
+    <span className="indicator-base indicator-unknown">
+      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />
       {status}
     </span>
+  );
+}
+
+function VerificationIndicators({
+  status,
+  dataSource,
+  isFresh,
+}: {
+  status: ReportStatus;
+  dataSource?: ReportDataSource;
+  isFresh?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <DataSourceBadge source={dataSource} />
+      <FreshnessBadge isFresh={isFresh} />
+      <VerificationBadge status={status} />
+    </div>
   );
 }
 
@@ -74,7 +159,7 @@ export function ReportsExplorerSection() {
                     Reserves
                   </th>
                   <th className="px-6 py-5 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    Published
+                    Anchored on-chain
                   </th>
                   <th className="px-6 py-5 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
 
@@ -95,7 +180,11 @@ export function ReportsExplorerSection() {
                         </span>
                       </td>
                       <td className="px-6 py-5">
-                        <StatusBadge status={report.status} />
+                        <VerificationIndicators
+                          status={report.status}
+                          dataSource={report.data_source}
+                          isFresh={report.is_fresh}
+                        />
                       </td>
                       <td className="px-6 py-5">
                         <span className={`font-display text-lg font-medium ${ratio >= 1 ? "text-success" : "text-warning"
@@ -107,7 +196,7 @@ export function ReportsExplorerSection() {
                         {formatUsd(report.reservesTotal)}
                       </td>
                       <td className="px-6 py-5 text-sm text-muted-foreground">
-                        {new Date(report.updatedAt).toLocaleDateString()}
+                        {new Date(report.publishedAt).toLocaleString()}
                       </td>
                       <td className="px-6 py-5 text-right">
                         <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">

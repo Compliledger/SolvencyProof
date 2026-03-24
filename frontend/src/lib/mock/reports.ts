@@ -1,5 +1,7 @@
 export type ReportStatus = "Verified" | "Pending" | "Failed" | "Draft";
 
+export type ReportDataSource = "LIVE_REGISTRY" | "FALLBACK_LOCAL" | "UNKNOWN";
+
 export type VerifiedReport = {
   id: string;
   epochId: string;
@@ -11,6 +13,10 @@ export type VerifiedReport = {
   publishedAt: string;
   updatedAt: string;
   notes?: string;
+  /** Explicit data-source classification for this report. */
+  data_source?: ReportDataSource;
+  /** Whether this report is currently within its validity window. */
+  is_fresh?: boolean;
   artifacts: {
     proof: string;
     publicSignals: string;
@@ -32,6 +38,8 @@ export const mockReports: VerifiedReport[] = [
     id: "RPT-2026-001",
     epochId: "EPOCH-2026-01-24",
     status: "Verified",
+    data_source: "LIVE_REGISTRY",
+    is_fresh: true,
     reservesTotal: 128_450_000_000,
     liabilitiesTotal: 114_687_500_000,
     liabilitiesRoot: "0x7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
@@ -49,6 +57,8 @@ export const mockReports: VerifiedReport[] = [
     id: "RPT-2026-002",
     epochId: "EPOCH-2026-01-17",
     status: "Verified",
+    data_source: "LIVE_REGISTRY",
+    is_fresh: true,
     reservesTotal: 126_010_000_000,
     liabilitiesTotal: 116_675_925_925,
     liabilitiesRoot: "0x3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d",
@@ -65,6 +75,8 @@ export const mockReports: VerifiedReport[] = [
     id: "RPT-2026-003",
     epochId: "EPOCH-2026-01-10",
     status: "Verified",
+    data_source: "LIVE_REGISTRY",
+    is_fresh: true,
     reservesTotal: 125_220_000_000,
     liabilitiesTotal: 108_886_956_521,
     liabilitiesRoot: "0x2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
@@ -81,6 +93,8 @@ export const mockReports: VerifiedReport[] = [
     id: "RPT-2025-052",
     epochId: "EPOCH-2025-12-27",
     status: "Verified",
+    data_source: "LIVE_REGISTRY",
+    is_fresh: false,
     reservesTotal: 124_900_000_000,
     liabilitiesTotal: 113_545_454_545,
     liabilitiesRoot: "0xfcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9",
@@ -97,6 +111,8 @@ export const mockReports: VerifiedReport[] = [
     id: "RPT-2025-051",
     epochId: "EPOCH-2025-12-20",
     status: "Verified",
+    data_source: "LIVE_REGISTRY",
+    is_fresh: false,
     reservesTotal: 123_750_000_000,
     liabilitiesTotal: 117_857_142_857,
     liabilitiesRoot: "0x185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
@@ -113,6 +129,7 @@ export const mockReports: VerifiedReport[] = [
     id: "RPT-2026-004",
     epochId: "EPOCH-2026-01-31",
     status: "Pending",
+    data_source: "UNKNOWN",
     reservesTotal: 130_000_000_000,
     liabilitiesTotal: 110_169_491_525,
     liabilitiesRoot: "0x4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a",
@@ -130,6 +147,8 @@ export const mockReports: VerifiedReport[] = [
     id: "RPT-2025-050",
     epochId: "EPOCH-2025-12-13",
     status: "Failed",
+    data_source: "FALLBACK_LOCAL",
+    is_fresh: false,
     reservesTotal: 88_000_000_000,
     liabilitiesTotal: 89_795_918_367,
     liabilitiesRoot: "0xef2d127de37b942baad06145e54b0c619a1f22327b2ebbcfbec78f5564afe39d",
