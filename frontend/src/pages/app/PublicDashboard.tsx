@@ -23,6 +23,7 @@ import {
 import SpotlightCard from "@/components/reactbits/SpotlightCard";
 import {
     Shield,
+    Droplets,
     Loader2,
     RefreshCw,
     Search,
@@ -223,18 +224,33 @@ export default function PublicDashboard() {
                             </div>
                         )}
 
-                        {/* Capital & Liquidity */}
-                        <div className="grid md:grid-cols-2 gap-4 animate-fade-in">
-                            <CapitalStateCard
-                                reservesTotal={Number(displayedEpoch.reserves_total)}
-                                totalLiabilities={Number(displayedEpoch.total_liabilities ?? 0)}
-                                capitalBacked={displayedEpoch.capital_backed}
-                            />
-                            <LiquidityStateCard
-                                liquidAssetsTotal={Number(displayedEpoch.liquid_assets_total)}
-                                nearTermLiabilitiesTotal={Number(displayedEpoch.near_term_liabilities_total)}
-                                liquidityReady={displayedEpoch.liquidity_ready}
-                            />
+                        {/* Capital & Liquidity — distinct sections */}
+                        <div className="grid md:grid-cols-2 gap-6 animate-fade-in">
+                            {/* Capital Position */}
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Shield size={15} className="text-green-500" />
+                                    <h2 className="font-medium text-sm text-green-500">Capital Position</h2>
+                                </div>
+                                <CapitalStateCard
+                                    reservesTotal={Number(displayedEpoch.reserves_total)}
+                                    totalLiabilities={Number(displayedEpoch.total_liabilities ?? 0)}
+                                    capitalBacked={displayedEpoch.capital_backed}
+                                />
+                            </div>
+
+                            {/* Liquidity Position */}
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Droplets size={15} className="text-purple-500" />
+                                    <h2 className="font-medium text-sm text-purple-500">Liquidity Position</h2>
+                                </div>
+                                <LiquidityStateCard
+                                    liquidAssetsTotal={Number(displayedEpoch.liquid_assets_total)}
+                                    nearTermLiabilitiesTotal={Number(displayedEpoch.near_term_liabilities_total)}
+                                    liquidityReady={displayedEpoch.liquidity_ready}
+                                />
+                            </div>
                         </div>
 
                         {/* Anchor metadata */}
