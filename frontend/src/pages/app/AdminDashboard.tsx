@@ -259,8 +259,8 @@ export default function AdminDashboard() {
                             <h2 className="font-medium text-sm text-purple-500">Liquidity Position</h2>
                         </div>
                         <LiquidityStateCard
-                            liquidAssetsTotal={Number(epochState.liquid_assets_total)}
-                            nearTermLiabilitiesTotal={Number(epochState.near_term_liabilities_total)}
+                            liquidAssetsTotal={Number(epochState.liquid_assets_total ?? 0)}
+                            nearTermLiabilitiesTotal={Number(epochState.near_term_liabilities_total ?? 0)}
                             liquidityReady={epochState.liquidity_ready}
                         />
                     </div>
