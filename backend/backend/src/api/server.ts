@@ -934,6 +934,20 @@ app.post("/api/workflow/full", async (_req: Request, res: Response) => {
 // Module-level adapter client singleton — all epoch routes share this instance.
 const epochAdapterClient = createAlgorandAdapterClient();
 
+type EpochHealthStatus =
+  | "HEALTHY"
+  | "LIQUIDITY_STRESSED"
+  | "UNDERCOLLATERALIZED"
+  | "CRITICAL"
+  | "EXPIRED";
+
+interface AnchorMetadata {
+  tx_id?: string;
+  app_id?: string;
+  network?: string;
+  anchored_at?: number;
+}
+
 interface NormalizedEpochState {
   entity_id: string;
   epoch_id: number;
@@ -951,6 +965,7 @@ interface NormalizedEpochState {
   timestamp: number;
   valid_until: number;
   anchored_at?: number;
+  anchor_metadata?: AnchorMetadata;
   adapter_version?: string;
   /** Module identifier — always "solvency" */
   module: "solvency";
@@ -1014,6 +1029,16 @@ function normalizeAdapterPayload(payload: AlgorandAdapterPayload): NormalizedEpo
     ? (payload.health_status as HealthStatus)
     : "CRITICAL";
 
+  const anchoredAt = payload.anchored_at ?? undefined;
+  const anchorMetadata: AnchorMetadata | undefined =
+    anchoredAt !== undefined
+      ? {
+          anchored_at: anchoredAt,
+          ...(process.env.ALGORAND_APP_ID !== undefined && { app_id: process.env.ALGORAND_APP_ID }),
+          network:     process.env.ALGORAND_NETWORK ?? "testnet",
+        }
+      : undefined;
+
   return {
     entity_id:                   payload.entity_id,
     epoch_id:                    payload.epoch_id,
@@ -1032,7 +1057,8 @@ function normalizeAdapterPayload(payload: AlgorandAdapterPayload): NormalizedEpo
     timestamp:                   payload.timestamp,
     valid_until:                 payload.valid_until,
     // anchored_at is optional — absent when the epoch has not yet been submitted on-chain
-    anchored_at:                 payload.anchored_at ?? undefined,
+    anchored_at:                 anchoredAt,
+    anchor_metadata:             anchorMetadata,
     adapter_version:             payload.adapter_version,
     // Universal Proof Artifact Schema fields
     module:                      "solvency",
@@ -1236,6 +1262,9 @@ app.get("/api/epoch/health", async (req: Request, res: Response) => {
     try {
       const adapterHealth = await epochAdapterClient.getHealthStatus(entityId);
       if (adapterHealth) {
+        console.info(
+          `[ADAPTER_SUCCESS] [epoch/health] entity=${entityId} health_status=${adapterHealth.health_status}`
+        );
         return res.json({
           entity_id:     adapterHealth.entity_id,
           health_status: adapterHealth.health_status,
@@ -1247,14 +1276,14 @@ app.get("/api/epoch/health", async (req: Request, res: Response) => {
         });
       }
     } catch (adapterErr) {
-      console.warn(
-        `[epoch/health] Adapter failed for entity=${entityId}, falling back to file-based state:`,
+      console.error(
+        `[ADAPTER_ERROR] [epoch/health] entity=${entityId}:`,
         adapterErr
       );
     }
 
     // FALLBACK: read from local output files when adapter is unavailable or returned null
-    console.info(`[epoch/health] [FALLBACK] Using file-based state for entity=${entityId}`);
+    console.info(`[FALLBACK_USED] [epoch/health] entity=${entityId}`);
     const state = buildEpochStateFromFiles(entityId);
     if (!state) {
       return res.status(404).json({ error: "No epoch state found for entity", entity_id: entityId });
@@ -1292,9 +1321,46 @@ app.get("/api/epoch/verify-stored", verifyStoredLimiter, async (req: Request, re
   }
 
   try {
+    // Primary: call the Algorand adapter to verify on-chain record
+    try {
+      const adapterResult = await epochAdapterClient.verifyStoredRecord(entityId, epochId);
+      console.info(
+        `[ADAPTER_SUCCESS] [epoch/verify-stored] entity=${entityId} epoch=${epochId} verified=${adapterResult.verified}`
+      );
+
+      // When verified, retrieve the full on-chain record to populate the response
+      let record: NormalizedEpochState | null = null;
+      if (adapterResult.verified) {
+        try {
+          const adapterRecord = await epochAdapterClient.getEpochRecord(entityId, epochId);
+          if (adapterRecord) {
+            record = normalizeAdapterPayload(adapterRecord);
+          }
+        } catch (recordErr) {
+          console.error(
+            `[ADAPTER_ERROR] [epoch/verify-stored] getEpochRecord failed for entity=${entityId} epoch=${epochId}:`,
+            recordErr
+          );
+        }
+      }
+
+      return res.json({
+        exists:     adapterResult.verified,
+        matches:    adapterResult.verified,
+        mismatches: adapterResult.verified ? [] : [adapterResult.message],
+        record,
+      });
+    } catch (adapterErr) {
+      console.error(
+        `[ADAPTER_ERROR] [epoch/verify-stored] entity=${entityId} epoch=${epochId}:`,
+        adapterErr
+      );
+    }
+
+    // FALLBACK: check local file state when adapter is unavailable
+    console.info(`[FALLBACK_USED] [epoch/verify-stored] entity=${entityId} epoch=${epochId}`);
     const state = buildEpochStateFromFiles(entityId);
 
-    // If no local state: nothing to verify
     if (!state) {
       return res.status(404).json({
         exists:     false,
@@ -1304,21 +1370,12 @@ app.get("/api/epoch/verify-stored", verifyStoredLimiter, async (req: Request, re
       });
     }
 
-    // Call the Algorand adapter to check what is stored on-chain
-    const adapterResult = await epochAdapterClient.verifyStoredRecord(entityId, epochId);
-
-    // exists: true when the adapter confirms an on-chain record OR when the
-    // locally persisted epoch matches the requested ID (the epoch was generated
-    // locally but may not yet have been submitted to the Algorand registry).
-    const exists  = adapterResult.verified || state.epoch_id === epochId;
-    // matches: only true when the adapter cryptographically confirms the record
-    const matches = adapterResult.verified;
-
+    const exists = state.epoch_id === epochId;
     return res.json({
       exists,
-      matches,
-      mismatches: matches ? [] : (adapterResult.message ? [adapterResult.message] : []),
-      record: exists ? state : null,
+      matches:    false, // on-chain verification unavailable
+      mismatches: exists ? ["on-chain verification unavailable - adapter unreachable"] : [],
+      record:     exists ? state : null,
     });
   } catch (err: unknown) {
     const error = err as Error;
@@ -1334,17 +1391,20 @@ app.get("/api/epoch/latest", async (req: Request, res: Response) => {
     try {
       const adapterState = await epochAdapterClient.getLatestState(entityId);
       if (adapterState) {
+        console.info(
+          `[ADAPTER_SUCCESS] [epoch/latest] entity=${entityId} epoch=${adapterState.epoch_id}`
+        );
         return res.json(normalizeAdapterPayload(adapterState));
       }
     } catch (adapterErr) {
-      console.warn(
-        `[epoch/latest] Adapter failed for entity=${entityId}, falling back to file-based state:`,
+      console.error(
+        `[ADAPTER_ERROR] [epoch/latest] entity=${entityId}:`,
         adapterErr
       );
     }
 
     // FALLBACK: read from local output files when adapter is unavailable or returned null
-    console.info(`[epoch/latest] [FALLBACK] Using file-based state for entity=${entityId}`);
+    console.info(`[FALLBACK_USED] [epoch/latest] entity=${entityId}`);
     const state = buildEpochStateFromFiles(entityId);
     if (!state) {
       return res.status(404).json({ error: "No epoch state found — run the full workflow first" });
@@ -1364,18 +1424,21 @@ app.get("/api/epoch/history", async (req: Request, res: Response) => {
     try {
       const adapterHistory = await epochAdapterClient.getEpochHistory(entityId);
       if (adapterHistory.length > 0) {
+        console.info(
+          `[ADAPTER_SUCCESS] [epoch/history] entity=${entityId} count=${adapterHistory.length}`
+        );
         return res.json(adapterHistory);
       }
     } catch (adapterErr) {
-      console.warn(
-        `[epoch/history] Adapter failed for entity=${entityId}, falling back to file-based state:`,
+      console.error(
+        `[ADAPTER_ERROR] [epoch/history] entity=${entityId}:`,
         adapterErr
       );
     }
 
     // FALLBACK: read from local output files when adapter is unavailable or returned empty
     // Only the latest epoch is persisted to disk; returns a single-element array.
-    console.info(`[epoch/history] [FALLBACK] Using file-based state for entity=${entityId}`);
+    console.info(`[FALLBACK_USED] [epoch/history] entity=${entityId}`);
     const state = buildEpochStateFromFiles(entityId);
     if (!state) {
       return res.json([]);
@@ -1405,18 +1468,21 @@ app.get("/api/epoch/:entityId", async (req: Request, res: Response) => {
       try {
         const adapterRecord = await epochAdapterClient.getEpochRecord(entityId, epochId);
         if (adapterRecord) {
+          console.info(
+            `[ADAPTER_SUCCESS] [epoch/:entityId] entity=${entityId} epoch=${epochId}`
+          );
           return res.json(normalizeAdapterPayload(adapterRecord));
         }
       } catch (adapterErr) {
-        console.warn(
-          `[epoch/:entityId] Adapter getEpochRecord failed for entity=${entityId} epoch=${epochId}, falling back to file-based state:`,
+        console.error(
+          `[ADAPTER_ERROR] [epoch/:entityId] getEpochRecord entity=${entityId} epoch=${epochId}:`,
           adapterErr
         );
       }
 
       // FALLBACK: check file-based state for the requested epochId
       console.info(
-        `[epoch/:entityId] [FALLBACK] Using file-based state for entity=${entityId} epoch=${epochId}`
+        `[FALLBACK_USED] [epoch/:entityId] entity=${entityId} epoch=${epochId}`
       );
       const fileState = buildEpochStateFromFiles(entityId);
       if (!fileState || fileState.epoch_id !== epochId) {
@@ -1434,17 +1500,20 @@ app.get("/api/epoch/:entityId", async (req: Request, res: Response) => {
     try {
       const adapterState = await epochAdapterClient.getLatestState(entityId);
       if (adapterState) {
+        console.info(
+          `[ADAPTER_SUCCESS] [epoch/:entityId] entity=${entityId} epoch=${adapterState.epoch_id}`
+        );
         return res.json(normalizeAdapterPayload(adapterState));
       }
     } catch (adapterErr) {
-      console.warn(
-        `[epoch/:entityId] Adapter getLatestState failed for entity=${entityId}, falling back to file-based state:`,
+      console.error(
+        `[ADAPTER_ERROR] [epoch/:entityId] getLatestState entity=${entityId}:`,
         adapterErr
       );
     }
 
     // FALLBACK: read from local output files
-    console.info(`[epoch/:entityId] [FALLBACK] Using file-based state for entity=${entityId}`);
+    console.info(`[FALLBACK_USED] [epoch/:entityId] entity=${entityId}`);
     const state = buildEpochStateFromFiles(entityId);
     if (!state) {
       return res.status(404).json({
