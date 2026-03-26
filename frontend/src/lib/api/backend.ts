@@ -54,15 +54,17 @@ export async function getLatestEpoch(entityId?: string): Promise<SolvencyEpochSt
 /**
  * Fetch the epoch history for the given entity from the backend.
  *
- * Calls `GET /api/epoch/history?entity_id=…`.
- * The backend uses the Algorand adapter as the primary source.
+ * Calls `GET /api/epoch/history?entity_id=…[&limit=…]`.
+ * The backend uses the Algorand adapter as the primary source, returns
+ * epochs sorted latest-first.
  *
  * @param entityId - entity identifier
+ * @param limit    - optional maximum number of epochs to return
  */
-export async function getEpochHistory(entityId: string): Promise<EpochHistoryItem[]> {
-    return apiFetch<EpochHistoryItem[]>(
-        `/api/epoch/history?entity_id=${encodeURIComponent(entityId)}`
-    );
+export async function getEpochHistory(entityId: string, limit?: number): Promise<EpochHistoryItem[]> {
+    const params = new URLSearchParams({ entity_id: entityId });
+    if (limit !== undefined && limit > 0) params.set("limit", String(limit));
+    return apiFetch<EpochHistoryItem[]>(`/api/epoch/history?${params.toString()}`);
 }
 
 // ---------------------------------------------------------------------------

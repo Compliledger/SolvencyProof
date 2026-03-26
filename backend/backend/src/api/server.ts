@@ -1302,34 +1302,36 @@ app.get("/api/epoch/latest", async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/epoch/history?entity_id=<entityId>
+// GET /api/epoch/history?entity_id=<entityId>[&limit=<n>]
 app.get("/api/epoch/history", async (req: Request, res: Response) => {
-  const entityId = (req.query.entity_id as string | undefined) ?? "default";
-  try {
-    // Primary: retrieve epoch history from the Algorand adapter (on-chain source of truth)
-    try {
-      const adapterHistory = await epochAdapterClient.getEpochHistory(entityId);
-      if (adapterHistory.length > 0) {
-        console.info(
-          `[ADAPTER_SUCCESS] [epoch/history] entity=${entityId} count=${adapterHistory.length}`
-        );
-        return res.json(adapterHistory);
-      }
-    } catch (adapterErr) {
-      console.error(
-        `[ADAPTER_ERROR] [epoch/history] entity=${entityId}:`,
-        adapterErr
-      );
-    }
+  const entityId   = (req.query.entity_id as string | undefined) ?? "default";
+  const limitParam = req.query.limit as string | undefined;
 
-    // FALLBACK: read from local output files when adapter is unavailable or returned empty
-    // Only the latest epoch is persisted to disk; returns a single-element array.
-    console.info(`[FALLBACK_USED] [epoch/history] entity=${entityId}`);
-    const state = buildEpochStateFromFiles(entityId);
-    if (!state) {
-      return res.json([]);
+  let limit: number | undefined;
+  if (limitParam !== undefined) {
+    const parsed = parseInt(limitParam, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      return res.status(400).json({ error: "limit must be a positive integer" });
     }
-    return res.json([state]);
+    limit = parsed;
+  }
+
+  try {
+    const adapterHistory = await epochAdapterClient.getEpochHistory(entityId);
+
+    // Sort: latest epoch first (descending by timestamp)
+    const sorted = [...adapterHistory].sort((a, b) => b.timestamp - a.timestamp);
+
+    // Apply optional limit
+    const limited = limit !== undefined ? sorted.slice(0, limit) : sorted;
+
+    // Normalize each payload to the frontend NormalizedEpochState shape
+    const normalized = limited.map(normalizeAdapterPayload);
+
+    console.info(
+      `[epoch/history] entity=${entityId} total=${adapterHistory.length} returned=${normalized.length}`
+    );
+    return res.json(normalized);
   } catch (err: unknown) {
     const error = err as Error;
     return res.status(500).json({ error: "Failed to read epoch history", details: error.message });

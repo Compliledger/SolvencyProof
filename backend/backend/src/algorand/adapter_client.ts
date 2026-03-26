@@ -21,7 +21,6 @@
 import type {
   AdapterHealthStatus,
   AlgorandAdapterPayload,
-  EpochHistoryEntry,
   SubmitEpochResult,
   VerifyStoredRecordResult,
 } from "./adapter_types.js";
@@ -64,9 +63,11 @@ export interface IAlgorandAdapterClient {
    * Retrieves the full epoch submission history for an entity.
    *
    * @param entityId - Entity identifier
-   * @returns List of epoch history entries in submission order (oldest first)
+   * @returns List of epoch payloads sorted by submission order (oldest first).
+   *   Each entry is a full AlgorandAdapterPayload suitable for normalisation
+   *   into the frontend NormalizedEpochState shape.
    */
-  getEpochHistory(entityId: string): Promise<EpochHistoryEntry[]>;
+  getEpochHistory(entityId: string): Promise<AlgorandAdapterPayload[]>;
 
   /**
    * Verifies that the on-chain record for a specific epoch matches the
@@ -161,7 +162,7 @@ export class AlgorandAdapterStub implements IAlgorandAdapterClient {
     return null;
   }
 
-  async getEpochHistory(entityId: string): Promise<EpochHistoryEntry[]> {
+  async getEpochHistory(entityId: string): Promise<AlgorandAdapterPayload[]> {
     // TODO: Forward to compliledger-algorand-adapter's getEpochHistory()
     console.warn(
       `[AlgorandAdapterStub] getEpochHistory called — adapter not yet connected. entity_id=${entityId}`

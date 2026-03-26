@@ -23,6 +23,8 @@ import {
   HEALTH_STATUS_STRING_MAP,
   makeEpochBoxKey,
   makeLatestBoxKey,
+  BOX_KEY_ENTITY_PREFIX,
+  BOX_KEY_EPOCH_INFIX,
 } from "../types/registry.js";
 
 // ============================================================
@@ -371,6 +373,43 @@ export class SolventRegistryClient {
     if (nowSeconds > state.valid_until) return HealthStatus.EXPIRED;
 
     return state.health_status;
+  }
+
+  /**
+   * Returns all historical epoch records for an entity by enumerating box
+   * keys stored on-chain.
+   *
+   * Calls getApplicationBoxes to list every box for the app, filters names
+   * that match the `entity:{entityId}:epoch:` prefix, then reads each
+   * matching box. Returns records in an unspecified order — callers should
+   * sort as needed (e.g. by timestamp descending).
+   *
+   * Returns an empty array when no epoch boxes exist or the algod call fails.
+   */
+  async getEpochHistory(entityId: string): Promise<EpochRecord[]> {
+    const epochPrefix = `${BOX_KEY_ENTITY_PREFIX}${entityId}${BOX_KEY_EPOCH_INFIX}`;
+    try {
+      const boxesResponse = await this.algodClient
+        .getApplicationBoxes(Number(this.appId))
+        .do();
+      const boxes: Array<{ name: Uint8Array }> = boxesResponse.boxes ?? [];
+
+      const dec = new TextDecoder();
+      const records: EpochRecord[] = [];
+      for (const box of boxes) {
+        const nameStr = dec.decode(box.name);
+        if (!nameStr.startsWith(epochPrefix)) continue;
+        const record = await this._readBox(box.name);
+        if (record) records.push(record);
+      }
+      return records;
+    } catch (err) {
+      console.warn(
+        `[SolventRegistryClient] getEpochHistory failed for entity_id=${entityId}:`,
+        err
+      );
+      return [];
+    }
   }
 
   // ----------------------------------------------------------

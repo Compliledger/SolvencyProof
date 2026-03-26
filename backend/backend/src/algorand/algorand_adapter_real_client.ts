@@ -13,7 +13,7 @@
  *  - Convert EpochRecord → AlgorandAdapterPayload for read methods
  *  - Forward all Algorand calls to SolventRegistryClient
  *  - Implement the three methods absent from SolventRegistryClient:
- *      getEpochHistory   – not supported (requires Indexer); returns [] + warns
+ *      getEpochHistory   – enumerates on-chain epoch boxes via getApplicationBoxes
  *      verifyStoredRecord – fetches on-chain record and confirms it exists
  *      isFresh           – checks valid_until on latest on-chain state
  */
@@ -35,7 +35,6 @@ import type { IAlgorandAdapterClient } from "./adapter_client.js";
 import type {
   AdapterHealthStatus,
   AlgorandAdapterPayload,
-  EpochHistoryEntry,
   SubmitEpochResult,
   VerifyStoredRecordResult,
 } from "./adapter_types.js";
@@ -242,16 +241,13 @@ export class AlgorandAdapterRealClient implements IAlgorandAdapterClient {
     return epochRecordToAdapterPayload(record);
   }
 
-  async getEpochHistory(entityId: string): Promise<EpochHistoryEntry[]> {
-    // The SolventRegistryClient reads individual box keys (latest + per-epoch boxes).
-    // Enumerating all epochs requires the Algorand Indexer API to scan past
-    // submit_epoch transactions — this is not yet implemented.
-    // The server will fall back to file-based epoch history.
-    console.warn(
-      `[AlgorandAdapterRealClient] getEpochHistory is not supported by the ` +
-        `registry client (requires Indexer API). Returning [] for entity_id=${entityId}.`
+  async getEpochHistory(entityId: string): Promise<AlgorandAdapterPayload[]> {
+    console.info(
+      `[AlgorandAdapterRealClient] getEpochHistory: entity_id=${entityId}`
     );
-    return [];
+
+    const records = await this.registryClient.getEpochHistory(entityId);
+    return records.map((record) => epochRecordToAdapterPayload(record));
   }
 
   async verifyStoredRecord(
