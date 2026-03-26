@@ -11,6 +11,19 @@
  * Shape (CompliLedger Universal Proof Artifact Schema):
  *   module              – always "solvency"
  *   entity_id           – reporting entity identifier
+ *   rule_version_used   – policy_version (from CompliPolicy) or adapter_version fallback
+ *   decision_result     – health_status string (HEALTHY / LIQUIDITY_STRESSED / …)
+ *   evaluation_context  – numeric inputs used for the health decision
+ *   reason_codes        – machine-readable reason codes derived from the evaluation
+ *   timestamp           – Unix timestamp (seconds) of epoch generation
+ *   bundle_hash         – proof_hash (deterministic SHA-256 commitment)
+ *   anchor_metadata     – populated after on-chain submission
+ *   policy_lineage      – "<jurisdiction>/<policy_version>" from CompliPolicy
+ *   rule_snapshot_hash  – deterministic SHA-256 hash of the active CompliPolicy
+ */
+
+import type { SolvencyEpochObject } from "./epoch.js";
+import type { RuleSnapshot } from "../complistate/rule_snapshot.js";
  *   rule_version_used   – adapter_version from the epoch object
  *   marketproof_status  – ADMITTED / NOT_ADMITTED from the MarketProof check
  *   decision_result     – health_status string (HEALTHY / LIQUIDITY_STRESSED / …)
@@ -92,7 +105,7 @@ export interface UniversalProofArtifact {
   module: "solvency";
   /** Reporting entity identifier */
   entity_id: string;
-  /** Adapter/rule version used to produce this artifact */
+  /** Policy or adapter version used to produce this artifact */
   rule_version_used: string;
   /**
    * MarketProof admission status — ADMITTED if all admission checks passed
@@ -117,6 +130,18 @@ export interface UniversalProofArtifact {
   bundle_hash: string;
   /** On-chain anchor metadata — always structured, anchored=false before submission */
   anchor_metadata: AnchorMetadata;
+  /**
+   * Human-readable policy lineage string from the active CompliPolicy.
+   * Format: "<jurisdiction>/<policy_version>" — e.g. "GLOBAL/1.0.0".
+   * Undefined when no CompliPolicy was loaded during evaluation.
+   */
+  policy_lineage?: string;
+  /**
+   * Deterministic SHA-256 commitment hash over the canonical CompliPolicy fields.
+   * Allows verifiers to confirm exactly which rules produced this decision.
+   * Undefined when no CompliPolicy was loaded during evaluation.
+   */
+  rule_snapshot_hash?: string;
 }
 
 // ============================================================
@@ -181,6 +206,14 @@ function buildAnchorMetadata(input: AnchorMetadataInput = {}): AnchorMetadata {
  *
  * @param epoch         - Canonical epoch object produced by the backend engine
  * @param anchorMetadata - Optional on-chain anchor details (populated after submit)
+ * @param epoch         - Canonical epoch object produced by the backend engine
+ * @param anchorMetadata - Optional on-chain anchor details (populated after submit)
+ * @param ruleSnapshot  - Optional CompliState rule snapshot (policy lineage + hash)
+ */
+export function toUniversalProofArtifact(
+  epoch: SolvencyEpochObject,
+  anchorMetadata: AnchorMetadata = {},
+  ruleSnapshot?: RuleSnapshot
  * @param epoch       - Canonical epoch object produced by the backend engine
  * @param anchorInput - Optional on-chain anchor details (populated after submit)
  * @param jurisdiction      - Regulatory jurisdiction of the entity (default: "")
@@ -204,6 +237,8 @@ export function toUniversalProofArtifact(
     decision_result:    epoch.health_status,
     module:            "solvency",
     entity_id:         epoch.entity_id,
+    rule_version_used: ruleSnapshot?.policy_version ?? epoch.adapter_version,
+    decision_result:   epoch.health_status,
     rule_version_used: epoch.adapter_version,
     decision_result: {
       capital_backed:  epoch.capital_backed,
@@ -222,6 +257,13 @@ export function toUniversalProofArtifact(
       marketproof_status:          marketproofStatus,
     },
     reason_codes:    [...marketproofCodes, ...financialCodes],
+    reason_codes:      deriveReasonCodes(epoch.capital_backed, epoch.liquidity_ready),
+    timestamp:         epoch.timestamp,
+    bundle_hash:       epoch.proof_hash,
+    anchor_metadata:   anchorMetadata,
+    policy_lineage:    ruleSnapshot?.policy_lineage,
+    rule_snapshot_hash: ruleSnapshot?.rule_snapshot_hash,
+    reason_codes:    deriveReasonCodes(epoch.capital_backed, epoch.liquidity_ready),
     timestamp:       epoch.timestamp,
     bundle_hash:     epoch.proof_hash,
     anchor_metadata: buildAnchorMetadata(anchorInput),
