@@ -25,6 +25,8 @@ import type {
   SubmitEpochResult,
   VerifyStoredRecordResult,
 } from "./adapter_types.js";
+import { loadAlgorandAdapterConfig } from "./adapter_config.js";
+import { createAlgorandAdapterRealClient } from "./algorand_adapter_real_client.js";
 
 // ============================================================
 // INTERFACE
@@ -229,20 +231,49 @@ export class AlgorandAdapterStub implements IAlgorandAdapterClient {
 /**
  * Returns an IAlgorandAdapterClient instance.
  *
- * Currently returns AlgorandAdapterStub because the shared
- * compliledger-algorand-adapter package is not yet installed.
+ * When ALGORAND_ADAPTER_ENABLED=true the factory reads env vars via
+ * loadAlgorandAdapterConfig() and returns a live AlgorandAdapterRealClient
+ * backed by the shared SolventRegistryClient.
  *
- * TODO: Once @compliledger/algorand-adapter is published and available:
- *   1. npm install @compliledger/algorand-adapter
- *   2. Import the real client:
- *        import { createAlgorandAdapterClient as createRealClient }
- *          from "@compliledger/algorand-adapter";
- *   3. Instantiate and return it here (e.g. based on env config):
- *        if (process.env.ALGORAND_ADAPTER_ENABLED === "true") {
- *          return createRealClient({ appId: ..., nodeUrl: ..., signer: ... });
- *        }
- *   4. Remove AlgorandAdapterStub once the real client is verified in staging
+ * When ALGORAND_ADAPTER_ENABLED is absent or not "true" the factory returns
+ * AlgorandAdapterStub, which logs warnings and returns safe placeholders so
+ * the rest of the system continues to function without on-chain access.
+ *
+ * Required env vars for the real client:
+ *   ALGORAND_ADAPTER_ENABLED=true
+ *   ALGORAND_APP_ID             — deployed SolventRegistry application ID
+ *
+ * Optional env vars (with testnet defaults):
+ *   ALGORAND_ALGOD_URL          — Algod node URL
+ *   ALGORAND_ALGOD_TOKEN        — Algod auth token
+ *   ALGORAND_ALGOD_PORT         — Algod port
+ *   ALGORAND_NETWORK            — "testnet" | "mainnet"
+ *   ALGO_MNEMONIC               — 25-word mnemonic (needed for submitEpoch)
+ *   ALGORAND_SENDER_ADDRESS     — Override sender address
  */
 export function createAlgorandAdapterClient(): IAlgorandAdapterClient {
+  if (process.env.ALGORAND_ADAPTER_ENABLED === "true") {
+    try {
+      const config = loadAlgorandAdapterConfig();
+      const client = createAlgorandAdapterRealClient(config);
+      console.info(
+        `[createAlgorandAdapterClient] Real Algorand adapter enabled: ` +
+          `network=${config.network} appId=${config.appId}`
+      );
+      return client;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[createAlgorandAdapterClient] Failed to create real adapter client — ` +
+          `falling back to stub. Error: ${message}`
+      );
+    }
+  }
+
+  console.warn(
+    "[createAlgorandAdapterClient] ALGORAND_ADAPTER_ENABLED is not set to 'true'. " +
+      "Using AlgorandAdapterStub — on-chain reads/writes are disabled. " +
+      "Set ALGORAND_ADAPTER_ENABLED=true and ALGORAND_APP_ID to enable real integration."
+  );
   return new AlgorandAdapterStub();
 }

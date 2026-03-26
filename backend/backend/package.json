@@ -17,7 +17,8 @@
     "scan:reserves": "npx tsx src/reserves-scanner.ts",
     "prove:solvency": "npx tsx src/solvency-prover.ts",
     "submit:proof": "npx tsx src/submit-proof.ts",
-    "verify:inclusion": "npx tsx src/verify-inclusion.ts"
+    "verify:inclusion": "npx tsx src/verify-inclusion.ts",
+    "test:algorand:e2e": "npx tsx src/scripts/test-algorand-e2e.ts"
   },
   "dependencies": {
     "@erc7824/nitrolite": "^0.1.0",

@@ -433,6 +433,24 @@ export function createMainnetClient(
   });
 }
 
+/**
+ * Creates a SolventRegistryClient for Algorand TestNet, initialised from a
+ * 25-word mnemonic. The derived account is used as both the signer and sender
+ * for submit_epoch transactions.
+ *
+ * @param appId    - On-chain application ID of the deployed SolventRegistry
+ * @param mnemonic - 25-word Algorand mnemonic (BIP-39 not supported; use
+ *                   the algosdk-generated format from `goal account new`)
+ */
+export function createTestnetClientFromMnemonic(
+  appId: bigint,
+  mnemonic: string
+): SolventRegistryClient {
+  const account = algosdk.mnemonicToSecretKey(mnemonic);
+  const signer = algosdk.makeBasicAccountTransactionSigner(account);
+  return createTestnetClient(appId, signer, account.addr);
+}
+
 // ============================================================
 // RE-EXPORTS for adapter convenience
 // ============================================================

@@ -25,6 +25,7 @@ import {
   toAlgorandSolventRegistryPayload,
   writeAlgorandPayload,
 } from "../algorand/adapter_payload.js";
+import { toUniversalProofArtifact } from "../types/proof_artifact.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,6 +56,14 @@ async function main(): Promise<void> {
   }
 
   writeAlgorandPayload(payload, OUTPUT_DIR);
+
+  // Build and write the universal proof artifact
+  const proofArtifact = toUniversalProofArtifact(epoch);
+  writeFileSync(
+    path.join(OUTPUT_DIR, "proof_artifact.json"),
+    JSON.stringify(proofArtifact, null, 2),
+    "utf-8"
+  );
 
   // Also write full epoch object for debugging / future use
   writeFileSync(
@@ -87,6 +96,7 @@ async function main(): Promise<void> {
   console.log("══════════════════════════════════════════════════\n");
   console.log(`✅ Payload written to: ${path.join(OUTPUT_DIR, "latest_epoch.json")}`);
   console.log(`✅ Full epoch written to: ${path.join(OUTPUT_DIR, "latest_epoch_full.json")}`);
+  console.log(`✅ Proof artifact written to: ${path.join(OUTPUT_DIR, "proof_artifact.json")}`);
 }
 
 main().catch((err: Error) => {
