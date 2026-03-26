@@ -1,14 +1,20 @@
 /**
- * UserVerification — Epoch-Aware Inclusion Verification
+ * UserVerification — Epoch-Aware Verification Console
  *
- * Verifies whether a user's balance is included in the liability Merkle tree
- * for a specific epoch.  Users can optionally specify an epoch ID; if omitted
- * the backend uses the latest available epoch.
+ * Two independent verification flows:
+ *  1. Liability Inclusion — checks whether a user ID appears in the liability root.
+ *  2. Stored Record — verifies that an Algorand registry record matches backend state.
+ *
+ * Uses the backend API layer (lib/api/backend.ts) with canonical types (lib/types.ts).
+ * No solvency logic is performed on the frontend.
  */
 import { useState } from "react";
 import { PortalLayout } from "@/components/portal/PortalLayout";
-import { verifyUserInclusion } from "@/services/solvencyService";
-import type { InclusionResult } from "@/types/solvency";
+import { verifyUserInclusion, verifyStoredRecord } from "@/lib/api/backend";
+import type { UserInclusionResult, VerificationResult } from "@/lib/types";
+import { buildAnchorFallback } from "@/lib/types";
+import { DataSourceBanner } from "@/components/DataSourceBanner";
+import { ReasonCodesList, RegistryMetadataCard } from "@/components/solvency";
 import SpotlightCard from "@/components/reactbits/SpotlightCard";
 import {
     Shield,
@@ -21,28 +27,90 @@ import {
     Info,
     Search,
     Hash,
+    Loader2,
+    Database,
+    Tag,
+    AlertTriangle,
 } from "lucide-react";
 
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+function TabButton({
+    active,
+    onClick,
+    children,
+}: {
+    active: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                active
+                    ? "bg-accent/10 text-accent border border-accent/30"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+            }`}
+        >
+            {children}
+        </button>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function UserVerification() {
+    const [tab, setTab] = useState<"inclusion" | "record">("inclusion");
+
+    // ---- Liability Inclusion state ----
     const [userId, setUserId] = useState("");
-    const [epochId, setEpochId] = useState("");
+    const [entityId, setEntityId] = useState("");
+    const [epochIdInput, setEpochIdInput] = useState("");
     const [isVerifying, setIsVerifying] = useState(false);
-    const [result, setResult] = useState<InclusionResult | null>(null);
+    const [result, setResult] = useState<UserInclusionResult | null>(null);
+    const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
 
+    // ---- Stored Record Verification state ----
+    const [recEntityId, setRecEntityId] = useState("");
+    const [recEpochIdInput, setRecEpochIdInput] = useState("");
+    const [isRecVerifying, setIsRecVerifying] = useState(false);
+    const [recResult, setRecResult] = useState<VerificationResult | null>(null);
+    const [recError, setRecError] = useState<string | null>(null);
+    const [recCopied, setRecCopied] = useState(false);
+
+    // ---- Handlers: Liability Inclusion ----
     const handleVerify = async () => {
         if (!userId.trim()) return;
         setIsVerifying(true);
         setResult(null);
-        const res = await verifyUserInclusion(userId.trim(), epochId.trim() || undefined);
-        setResult(res);
-        setIsVerifying(false);
+        setError(null);
+        try {
+            const epochId = epochIdInput.trim()
+                ? parseInt(epochIdInput.trim(), 10)
+                : undefined;
+            const res = await verifyUserInclusion(
+                userId.trim(),
+                epochId !== undefined && !Number.isNaN(epochId) ? epochId : undefined,
+                entityId.trim() || undefined
+            );
+            setResult(res);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Verification failed");
+        } finally {
+            setIsVerifying(false);
+        }
     };
 
     const handleClear = () => {
         setUserId("");
-        setEpochId("");
         setResult(null);
+        setError(null);
     };
 
     const handleCopyResult = () => {
@@ -50,6 +118,39 @@ export default function UserVerification() {
         navigator.clipboard.writeText(JSON.stringify(result, null, 2));
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    // ---- Handlers: Stored Record ----
+    const handleRecVerify = async () => {
+        if (!recEntityId.trim() || !recEpochIdInput.trim()) return;
+        const epochId = parseInt(recEpochIdInput.trim(), 10);
+        if (Number.isNaN(epochId) || epochId < 1) {
+            setRecError("Please enter a valid epoch ID (positive integer).");
+            return;
+        }
+        setIsRecVerifying(true);
+        setRecResult(null);
+        setRecError(null);
+        try {
+            const res = await verifyStoredRecord(recEntityId.trim(), epochId);
+            setRecResult(res);
+        } catch (e) {
+            setRecError(e instanceof Error ? e.message : "Verification failed");
+        } finally {
+            setIsRecVerifying(false);
+        }
+    };
+
+    const handleRecClear = () => {
+        setRecResult(null);
+        setRecError(null);
+    };
+
+    const handleCopyRecResult = () => {
+        if (!recResult) return;
+        navigator.clipboard.writeText(JSON.stringify(recResult, null, 2));
+        setRecCopied(true);
+        setTimeout(() => setRecCopied(false), 2000);
     };
 
     return (
@@ -61,207 +162,640 @@ export default function UserVerification() {
                         <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20">
                             <Shield size={28} className="text-purple-500" />
                         </div>
-                        Verify Inclusion
+                        Verify
                     </h1>
                     <p className="text-muted-foreground">
-                        Confirm that your balance is included in a specific epoch's liability Merkle tree —
-                        without revealing any other user's data.
+                        Check liability inclusion for a user account, or verify that an
+                        on-chain registry record matches the backend-computed state.
                     </p>
                 </div>
 
-                <div className="grid gap-8 lg:grid-cols-12">
-                    {/* Main Form */}
-                    <div className="lg:col-span-7 space-y-6">
-                        <SpotlightCard
-                            spotlightColor="rgba(147, 51, 234, 0.1)"
-                            className="bg-card/80 border-border animate-fade-in"
-                        >
-                            <div className="p-6 space-y-4">
-                                <h2 className="font-display font-medium flex items-center gap-2">
-                                    <Search size={18} className="text-purple-500" />
-                                    Verification Details
-                                </h2>
+                {/* Tab selector */}
+                <div className="flex items-center gap-2 animate-fade-in">
+                    <TabButton active={tab === "inclusion"} onClick={() => setTab("inclusion")}>
+                        <Search size={14} />
+                        Liability Inclusion
+                    </TabButton>
+                    <TabButton active={tab === "record"} onClick={() => setTab("record")}>
+                        <Database size={14} />
+                        Stored Record
+                    </TabButton>
+                </div>
 
-                                {/* User ID */}
-                                <div>
-                                    <label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
-                                        User ID <span className="text-destructive">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={userId}
-                                        onChange={(e) => setUserId(e.target.value)}
-                                        onKeyDown={(e) => e.key === "Enter" && handleVerify()}
-                                        placeholder="e.g. alice, user-123"
-                                        className="w-full h-11 px-4 rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/50 transition-all"
-                                    />
-                                </div>
+                {/* ============================================================
+                    Tab 1 — Liability Inclusion
+                ============================================================ */}
+                {tab === "inclusion" && (
+                    <div className="grid gap-8 lg:grid-cols-12">
+                        {/* Form */}
+                        <div className="lg:col-span-7 space-y-6">
+                            <SpotlightCard
+                                spotlightColor="rgba(147,51,234,0.1)"
+                                className="bg-card/80 border-border animate-fade-in"
+                            >
+                                <div className="p-6 space-y-4">
+                                    <h2 className="font-display font-medium flex items-center gap-2">
+                                        <Search size={16} className="text-purple-500" />
+                                        Inclusion Check
+                                    </h2>
 
-                                {/* Epoch ID (optional) */}
-                                <div>
-                                    <label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
-                                        Epoch ID <span className="text-muted-foreground font-normal">(optional — leave blank for latest)</span>
-                                    </label>
-                                    <div className="relative">
-                                        <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                                    {/* User ID */}
+                                    <div>
+                                        <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1 block">
+                                            User / Account ID <span className="text-destructive">*</span>
+                                        </label>
                                         <input
                                             type="text"
-                                            value={epochId}
-                                            onChange={(e) => setEpochId(e.target.value)}
+                                            value={userId}
+                                            onChange={(e) => setUserId(e.target.value)}
                                             onKeyDown={(e) => e.key === "Enter" && handleVerify()}
-                                            placeholder="e.g. 7, epoch-2024-01"
-                                            className="w-full h-11 pl-9 pr-4 rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/50 transition-all"
+                                            placeholder="e.g. alice"
+                                            className="w-full h-11 px-4 rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/50 transition-all"
                                         />
                                     </div>
-                                </div>
 
-                                <div className="flex items-center gap-3 pt-1">
-                                    <button
-                                        onClick={handleVerify}
-                                        disabled={!userId.trim() || isVerifying}
-                                        className="flex-1 btn-primary justify-center h-11 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {isVerifying ? (
-                                            <><RefreshCw size={16} className="animate-spin" /> Verifying…</>
-                                        ) : (
-                                            <><Shield size={16} /> Verify Inclusion</>
-                                        )}
-                                    </button>
-                                    <button onClick={handleClear} className="btn-secondary h-11">
-                                        <Trash2 size={16} />
-                                        Clear
-                                    </button>
-                                </div>
-                            </div>
-                        </SpotlightCard>
-
-                        {/* Result Panel */}
-                        {result && (
-                            <SpotlightCard
-                                spotlightColor={result.success ? "rgba(74, 222, 128, 0.15)" : "rgba(239, 68, 68, 0.15)"}
-                                className={`border-2 animate-fade-in ${
-                                    result.success
-                                        ? "border-success/50 bg-success/5"
-                                        : "border-destructive/50 bg-destructive/5"
-                                }`}
-                            >
-                                <div className="p-6">
-                                    <div className="flex items-start gap-4 mb-5">
-                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${result.success ? "bg-success/20" : "bg-destructive/20"}`}>
-                                            {result.success
-                                                ? <CheckCircle2 size={24} className="text-success" />
-                                                : <XCircle size={24} className="text-destructive" />}
-                                        </div>
-                                        <div>
-                                            <h3 className={`font-display text-xl font-semibold ${result.success ? "text-success" : "text-destructive"}`}>
-                                                {result.success ? "✓ VERIFIED!" : "✗ Not Found"}
-                                            </h3>
-                                            <p className="text-sm text-muted-foreground mt-1">
-                                                {result.success
-                                                    ? "Your balance is included in the solvency proof."
-                                                    : result.error ?? "User not found in the Merkle tree."}
-                                            </p>
-                                        </div>
+                                    {/* Entity ID (optional) */}
+                                    <div>
+                                        <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1 block">
+                                            Entity ID{" "}
+                                            <span className="text-muted-foreground/60">(optional)</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={entityId}
+                                            onChange={(e) => setEntityId(e.target.value)}
+                                            placeholder="e.g. demo-exchange"
+                                            className="w-full h-11 px-4 rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/50 transition-all"
+                                        />
                                     </div>
 
-                                    {result.success && (
-                                        <div className="space-y-4">
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div className="p-3 rounded-lg bg-secondary/30 border border-border">
-                                                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">User</p>
-                                                    <p className="font-mono font-medium">{result.user_id}</p>
-                                                </div>
-                                                <div className="p-3 rounded-lg bg-secondary/30 border border-border">
-                                                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Epoch</p>
-                                                    <p className="font-mono font-medium">#{result.epoch_id || "latest"}</p>
-                                                </div>
-                                                {result.balance != null && (
-                                                    <div className="p-3 rounded-lg bg-secondary/30 border border-border">
-                                                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Balance</p>
-                                                        <p className="font-semibold text-success">{result.balance.toLocaleString()} units</p>
-                                                    </div>
-                                                )}
-                                                {result.liability_root && (
-                                                    <div className="p-3 rounded-lg bg-secondary/30 border border-border col-span-2">
-                                                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Liability Root</p>
-                                                        <p className="font-mono text-xs break-all">{result.liability_root}</p>
-                                                    </div>
-                                                )}
-                                            </div>
+                                    {/* Epoch ID (optional) */}
+                                    <div>
+                                        <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1 block">
+                                            Epoch ID{" "}
+                                            <span className="text-muted-foreground/60">
+                                                (optional — defaults to latest)
+                                            </span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={epochIdInput}
+                                            onChange={(e) => setEpochIdInput(e.target.value)}
+                                            placeholder="e.g. 42"
+                                            min={1}
+                                            className="w-full h-11 px-4 rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/50 transition-all"
+                                        />
+                                    </div>
 
-                                            {result.proof && result.proof.length > 0 && (
-                                                <div>
-                                                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Merkle Proof</p>
-                                                    <div className="font-mono text-xs bg-secondary/30 p-3 rounded-lg max-h-36 overflow-auto border border-border space-y-0.5">
-                                                        {result.proof.map((p, i) => (
-                                                            <div key={i} className="truncate">{p}</div>
-                                                        ))}
-                                                    </div>
-                                                </div>
+                                    <div className="flex items-center gap-3 pt-1">
+                                        <button
+                                            onClick={handleVerify}
+                                            disabled={!userId.trim() || isVerifying}
+                                            className="flex-1 btn-primary justify-center h-11 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isVerifying ? (
+                                                <>
+                                                    <Loader2 size={15} className="animate-spin" />
+                                                    Verifying…
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Shield size={15} />
+                                                    Verify Inclusion
+                                                </>
                                             )}
-                                        </div>
-                                    )}
-
-                                    <div className="flex gap-2 mt-5">
-                                        <button onClick={handleCopyResult} className="flex-1 btn-secondary text-sm justify-center">
-                                            {copied ? <Check size={14} /> : <Copy size={14} />}
-                                            {copied ? "Copied!" : "Copy Result"}
                                         </button>
-                                        <button onClick={handleClear} className="btn-secondary text-sm">
-                                            Verify Another
+                                        <button onClick={handleClear} className="btn-secondary h-11">
+                                            <Trash2 size={15} />
+                                            Clear
                                         </button>
                                     </div>
                                 </div>
                             </SpotlightCard>
-                        )}
-                    </div>
 
-                    {/* Right Column — Info */}
-                    <div className="lg:col-span-5 space-y-5">
-                        <div className="rounded-xl border border-border bg-card/50 p-5 animate-fade-in">
-                            <div className="flex items-center gap-2 mb-3">
-                                <Info size={15} className="text-purple-500" />
-                                <h3 className="font-medium text-sm">How Inclusion Verification Works</h3>
-                            </div>
-                            <ul className="space-y-2.5 text-sm text-muted-foreground">
-                                <li className="flex gap-2">
-                                    <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
-                                    <span>The backend builds a Merkle tree from all user liabilities for each epoch.</span>
-                                </li>
-                                <li className="flex gap-2">
-                                    <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
-                                    <span>Your balance is hashed into a leaf — no other user's data is revealed.</span>
-                                </li>
-                                <li className="flex gap-2">
-                                    <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
-                                    <span>The Merkle root is anchored on Algorand as part of the epoch's proof hash.</span>
-                                </li>
-                                <li className="flex gap-2">
-                                    <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
-                                    <span>You can verify inclusion against any historical epoch by specifying its ID.</span>
-                                </li>
-                            </ul>
+                            {/* Error */}
+                            {error && (
+                                <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/5 flex items-center gap-3 text-sm animate-fade-in">
+                                    <XCircle size={18} className="text-destructive shrink-0" />
+                                    <p className="text-destructive">{error}</p>
+                                </div>
+                            )}
+
+                            {/* Result */}
+                            {result && (
+                                <SpotlightCard
+                                    spotlightColor={
+                                        result.included
+                                            ? "rgba(74,222,128,0.15)"
+                                            : "rgba(239,68,68,0.15)"
+                                    }
+                                    className={`border-2 animate-fade-in ${
+                                        result.included
+                                            ? "border-success/50 bg-success/5"
+                                            : "border-destructive/50 bg-destructive/5"
+                                    }`}
+                                >
+                                    <div className="p-6 space-y-5">
+                                        {/* Verdict */}
+                                        <div className="flex items-start gap-4">
+                                            <div
+                                                className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                                                    result.included ? "bg-success/20" : "bg-destructive/20"
+                                                }`}
+                                            >
+                                                {result.included ? (
+                                                    <CheckCircle2 size={24} className="text-success" />
+                                                ) : (
+                                                    <XCircle size={24} className="text-destructive" />
+                                                )}
+                                            </div>
+                                            <div>
+                                                <h3
+                                                    className={`font-display text-xl font-semibold ${
+                                                        result.included ? "text-success" : "text-destructive"
+                                                    }`}
+                                                >
+                                                    {result.included ? "✓ INCLUDED" : "✗ NOT INCLUDED"}
+                                                </h3>
+                                                <p className="text-sm text-muted-foreground mt-1">
+                                                    {result.included
+                                                        ? "This account is included in the liability commitment."
+                                                        : "This account was not found in the liability commitment for this epoch."}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Context */}
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                            <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                    User
+                                                </p>
+                                                <p className="font-mono font-medium">{userId}</p>
+                                            </div>
+                                            <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                    Entity
+                                                </p>
+                                                <p className="font-mono font-medium">{result.entity_id}</p>
+                                            </div>
+                                            <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                    Epoch
+                                                </p>
+                                                <p className="font-mono font-medium">#{result.epoch_id}</p>
+                                            </div>
+                                            <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                    Checked At
+                                                </p>
+                                                <p className="text-xs">
+                                                    {new Date(result.checked_at * 1000).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Liability root */}
+                                        {result.liability_root && (
+                                            <div className="text-sm">
+                                                <div className="flex items-center gap-1.5 mb-1">
+                                                    <Hash size={13} className="text-muted-foreground" />
+                                                    <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                                                        Liability Root
+                                                    </p>
+                                                </div>
+                                                <p className="font-mono text-xs break-all bg-secondary/30 p-2 rounded-lg border border-border">
+                                                    {result.liability_root}
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        <div className="flex gap-2 pt-1">
+                                            <button
+                                                onClick={handleCopyResult}
+                                                className="flex-1 btn-secondary text-sm justify-center"
+                                            >
+                                                {copied ? <Check size={13} /> : <Copy size={13} />}
+                                                {copied ? "Copied!" : "Copy Result"}
+                                            </button>
+                                            <button onClick={handleClear} className="btn-secondary text-sm">
+                                                <RefreshCw size={13} />
+                                                Verify Another
+                                            </button>
+                                        </div>
+                                    </div>
+                                </SpotlightCard>
+                            )}
                         </div>
 
-                        <div className="rounded-xl border border-border bg-secondary/20 p-5 animate-fade-in">
-                            <h4 className="font-medium text-sm mb-2">Sample User IDs</h4>
-                            <p className="text-xs text-muted-foreground mb-3">
-                                Try verifying these demo users (requires data in the backend):
-                            </p>
-                            <div className="space-y-1.5">
-                                {["alice", "bob", "charlie", "dave"].map((user) => (
-                                    <button
-                                        key={user}
-                                        onClick={() => { setUserId(user); setResult(null); }}
-                                        className="w-full p-2.5 rounded-lg bg-secondary/50 border border-border hover:border-purple-500/30 hover:bg-purple-500/5 transition-all text-left"
-                                    >
-                                        <span className="font-mono text-sm">{user}</span>
-                                    </button>
-                                ))}
+                        {/* Right column — info */}
+                        <div className="lg:col-span-5 space-y-6">
+                            <div className="rounded-xl border border-border bg-card/50 p-6 animate-fade-in">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Info size={15} className="text-purple-500" />
+                                    <h3 className="font-medium">How Inclusion Verification Works</h3>
+                                </div>
+                                <ul className="space-y-3 text-sm text-muted-foreground">
+                                    <li className="flex gap-2">
+                                        <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
+                                        <span>
+                                            Every user's balance is committed into a Merkle tree (liability
+                                            root) each epoch.
+                                        </span>
+                                    </li>
+                                    <li className="flex gap-2">
+                                        <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
+                                        <span>
+                                            You can verify your own inclusion without seeing any other user's
+                                            data.
+                                        </span>
+                                    </li>
+                                    <li className="flex gap-2">
+                                        <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
+                                        <span>
+                                            The liability root is anchored in the Algorand registry and is
+                                            independently verifiable.
+                                        </span>
+                                    </li>
+                                    <li className="flex gap-2">
+                                        <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
+                                        <span>
+                                            Leave the Epoch ID blank to check against the latest epoch.
+                                        </span>
+                                    </li>
+                                </ul>
                             </div>
                         </div>
                     </div>
-                </div>
+                )}
+
+                {/* ============================================================
+                    Tab 2 — Stored Record Verification
+                ============================================================ */}
+                {tab === "record" && (
+                    <div className="grid gap-8 lg:grid-cols-12">
+                        {/* Form */}
+                        <div className="lg:col-span-7 space-y-6">
+                            <SpotlightCard
+                                spotlightColor="rgba(99,102,241,0.1)"
+                                className="bg-card/80 border-border animate-fade-in"
+                            >
+                                <div className="p-6 space-y-4">
+                                    <h2 className="font-display font-medium flex items-center gap-2">
+                                        <Database size={16} className="text-indigo-400" />
+                                        Registry Record Check
+                                    </h2>
+
+                                    {/* Entity ID */}
+                                    <div>
+                                        <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1 block">
+                                            Entity ID <span className="text-destructive">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={recEntityId}
+                                            onChange={(e) => setRecEntityId(e.target.value)}
+                                            placeholder="e.g. demo-exchange"
+                                            className="w-full h-11 px-4 rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400/50 transition-all"
+                                        />
+                                    </div>
+
+                                    {/* Epoch ID */}
+                                    <div>
+                                        <label className="text-xs text-muted-foreground uppercase tracking-wider mb-1 block">
+                                            Epoch ID <span className="text-destructive">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            value={recEpochIdInput}
+                                            onChange={(e) => setRecEpochIdInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === "Enter" && handleRecVerify()}
+                                            placeholder="e.g. 42"
+                                            min={1}
+                                            className="w-full h-11 px-4 rounded-lg border border-border bg-secondary/30 text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-400/50 transition-all"
+                                        />
+                                    </div>
+
+                                    <div className="flex items-center gap-3 pt-1">
+                                        <button
+                                            onClick={handleRecVerify}
+                                            disabled={
+                                                !recEntityId.trim() ||
+                                                !recEpochIdInput.trim() ||
+                                                isRecVerifying
+                                            }
+                                            className="flex-1 btn-primary justify-center h-11 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isRecVerifying ? (
+                                                <>
+                                                    <Loader2 size={15} className="animate-spin" />
+                                                    Verifying…
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Database size={15} />
+                                                    Verify Record
+                                                </>
+                                            )}
+                                        </button>
+                                        <button onClick={handleRecClear} className="btn-secondary h-11">
+                                            <Trash2 size={15} />
+                                            Clear
+                                        </button>
+                                    </div>
+                                </div>
+                            </SpotlightCard>
+
+                            {/* Error */}
+                            {recError && (
+                                <div className="p-4 rounded-xl border border-destructive/30 bg-destructive/5 flex items-center gap-3 text-sm animate-fade-in">
+                                    <XCircle size={18} className="text-destructive shrink-0" />
+                                    <p className="text-destructive">{recError}</p>
+                                </div>
+                            )}
+
+                            {/* Result */}
+                            {recResult && (
+                                <SpotlightCard
+                                    spotlightColor={
+                                        !recResult.exists
+                                            ? "rgba(239,68,68,0.1)"
+                                            : recResult.matches
+                                            ? "rgba(74,222,128,0.15)"
+                                            : "rgba(234,179,8,0.15)"
+                                    }
+                                    className={`border-2 animate-fade-in ${
+                                        !recResult.exists
+                                            ? "border-destructive/50 bg-destructive/5"
+                                            : recResult.matches
+                                            ? "border-success/50 bg-success/5"
+                                            : "border-yellow-500/50 bg-yellow-500/5"
+                                    }`}
+                                >
+                                    <div className="p-6 space-y-5">
+                                        {/* Verdict */}
+                                        <div className="flex items-start gap-4">
+                                            <div
+                                                className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                                                    !recResult.exists
+                                                        ? "bg-destructive/20"
+                                                        : recResult.matches
+                                                        ? "bg-success/20"
+                                                        : "bg-yellow-500/20"
+                                                }`}
+                                            >
+                                                {!recResult.exists ? (
+                                                    <XCircle size={24} className="text-destructive" />
+                                                ) : recResult.matches ? (
+                                                    <CheckCircle2 size={24} className="text-success" />
+                                                ) : (
+                                                    <AlertTriangle size={24} className="text-yellow-500" />
+                                                )}
+                                            </div>
+                                            <div>
+                                                <h3
+                                                    className={`font-display text-xl font-semibold ${
+                                                        !recResult.exists
+                                                            ? "text-destructive"
+                                                            : recResult.matches
+                                                            ? "text-success"
+                                                            : "text-yellow-500"
+                                                    }`}
+                                                >
+                                                    {!recResult.exists
+                                                        ? "✗ NOT FOUND"
+                                                        : recResult.matches
+                                                        ? "✓ VERIFIED"
+                                                        : "⚠ MISMATCH"}
+                                                </h3>
+                                                <p className="text-sm text-muted-foreground mt-1">
+                                                    {!recResult.exists
+                                                        ? "No on-chain record was found for this entity and epoch."
+                                                        : recResult.matches
+                                                        ? "The on-chain registry record matches the backend-computed state."
+                                                        : "The on-chain record exists but differs from the backend-computed state."}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Data source + freshness banner */}
+                                        {recResult.record && (
+                                            <DataSourceBanner
+                                                dataSource={recResult.record.data_source}
+                                                isFresh={recResult.record.is_fresh}
+                                                isExpired={recResult.record.is_expired}
+                                                anchoredAt={recResult.record.anchored_at}
+                                                sourceType={recResult.record.source_type}
+                                                validUntil={recResult.record.valid_until}
+                                            />
+                                        )}
+
+                                        {/* Mismatches */}
+                                        {recResult.mismatches.length > 0 && (
+                                            <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-sm">
+                                                <p className="font-medium text-yellow-600 mb-1">
+                                                    Mismatched fields:
+                                                </p>
+                                                <ul className="list-disc list-inside text-muted-foreground space-y-0.5">
+                                                    {recResult.mismatches.map((f) => (
+                                                        <li key={f} className="font-mono text-xs">
+                                                            {f}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        {/* Record metadata */}
+                                        {recResult.record && (
+                                            <div className="space-y-4 text-sm">
+                                                <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                                                    Record Metadata
+                                                </p>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                            Epoch
+                                                        </p>
+                                                        <p className="font-mono font-medium">
+                                                            #{recResult.record.epoch_id}
+                                                        </p>
+                                                    </div>
+                                                    <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                            Health
+                                                        </p>
+                                                        <p className="font-mono font-medium">
+                                                            {recResult.record.health_status}
+                                                        </p>
+                                                    </div>
+                                                    <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                            Capital Backed
+                                                        </p>
+                                                        <p className={recResult.record.capital_backed ? "text-success font-medium" : "text-destructive font-medium"}>
+                                                            {recResult.record.capital_backed ? "Yes" : "No"}
+                                                        </p>
+                                                    </div>
+                                                    <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                            Liquidity Ready
+                                                        </p>
+                                                        <p className={recResult.record.liquidity_ready ? "text-success font-medium" : "text-yellow-500 font-medium"}>
+                                                            {recResult.record.liquidity_ready ? "Yes" : "No"}
+                                                        </p>
+                                                    </div>
+                                                    <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                            Recorded
+                                                        </p>
+                                                        <p className="text-xs">
+                                                            {new Date(
+                                                                recResult.record.timestamp * 1000
+                                                            ).toLocaleString()}
+                                                        </p>
+                                                    </div>
+                                                    {recResult.record.anchored_at !== undefined && (
+                                                        <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                                Anchored On-Chain
+                                                            </p>
+                                                            <p className="text-xs">
+                                                                {new Date(
+                                                                    recResult.record.anchored_at * 1000
+                                                                ).toLocaleString()}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    {recResult.record.rule_version_used && (
+                                                        <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                                Rule Version
+                                                            </p>
+                                                            <p className="font-mono text-xs">
+                                                                {recResult.record.rule_version_used}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Bundle hash — preferred over legacy proof_hash */}
+                                                <div>
+                                                    <div className="flex items-center gap-1.5 mb-1">
+                                                        <Hash size={13} className="text-muted-foreground" />
+                                                        <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                                                            Bundle Hash
+                                                        </p>
+                                                    </div>
+                                                    <p className="font-mono text-xs break-all bg-secondary/30 p-2 rounded-lg border border-border">
+                                                        {recResult.record.bundle_hash ?? recResult.record.proof_hash}
+                                                    </p>
+                                                </div>
+
+                                                {/* Liability root */}
+                                                <div>
+                                                    <div className="flex items-center gap-1.5 mb-1">
+                                                        <Hash size={13} className="text-muted-foreground" />
+                                                        <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                                                            Liability Root
+                                                        </p>
+                                                    </div>
+                                                    <p className="font-mono text-xs break-all bg-secondary/30 p-2 rounded-lg border border-border">
+                                                        {recResult.record.liability_root}
+                                                    </p>
+                                                </div>
+
+                                                {/* Reason codes */}
+                                                {recResult.record.reason_codes && recResult.record.reason_codes.length > 0 && (
+                                                    <div>
+                                                        <div className="flex items-center gap-1.5 mb-2">
+                                                            <Tag size={13} className="text-muted-foreground" />
+                                                            <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                                                                Reason Codes
+                                                            </p>
+                                                        </div>
+                                                        <ReasonCodesList codes={recResult.record.reason_codes} />
+                                                    </div>
+                                                )}
+
+                                                {/* Anchor metadata */}
+                                                {(recResult.record.anchor_metadata || recResult.record.anchored_at) && (
+                                                    <div>
+                                                        <div className="flex items-center gap-1.5 mb-2">
+                                                            <Hash size={13} className="text-muted-foreground" />
+                                                            <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                                                                Algorand Anchor
+                                                            </p>
+                                                        </div>
+                                                        <RegistryMetadataCard
+                                                            anchor={recResult.record.anchor_metadata ?? buildAnchorFallback(recResult.record.anchored_at)}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        <div className="flex gap-2 pt-1">
+                                            <button
+                                                onClick={handleCopyRecResult}
+                                                className="flex-1 btn-secondary text-sm justify-center"
+                                            >
+                                                {recCopied ? <Check size={13} /> : <Copy size={13} />}
+                                                {recCopied ? "Copied!" : "Copy Result"}
+                                            </button>
+                                            <button
+                                                onClick={handleRecClear}
+                                                className="btn-secondary text-sm"
+                                            >
+                                                <RefreshCw size={13} />
+                                                Verify Another
+                                            </button>
+                                        </div>
+                                    </div>
+                                </SpotlightCard>
+                            )}
+                        </div>
+
+                        {/* Right column — info */}
+                        <div className="lg:col-span-5 space-y-6">
+                            <div className="rounded-xl border border-border bg-card/50 p-6 animate-fade-in">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <Info size={15} className="text-indigo-400" />
+                                    <h3 className="font-medium">How Record Verification Works</h3>
+                                </div>
+                                <ul className="space-y-3 text-sm text-muted-foreground">
+                                    <li className="flex gap-2">
+                                        <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
+                                        <span>
+                                            Each anchored epoch has a corresponding record in the Algorand
+                                            registry.
+                                        </span>
+                                    </li>
+                                    <li className="flex gap-2">
+                                        <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
+                                        <span>
+                                            This check confirms that the on-chain record matches the
+                                            backend-computed proof hash, liability root, and reserves total.
+                                        </span>
+                                    </li>
+                                    <li className="flex gap-2">
+                                        <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
+                                        <span>
+                                            A mismatch indicates that the on-chain record may have been
+                                            tampered with or that the backend state is out of sync.
+                                        </span>
+                                    </li>
+                                    <li className="flex gap-2">
+                                        <CheckCircle2 size={15} className="text-success mt-0.5 shrink-0" />
+                                        <span>
+                                            Both entity ID and epoch ID are required for this check.
+                                        </span>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </PortalLayout>
     );

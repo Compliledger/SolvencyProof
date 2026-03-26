@@ -177,14 +177,12 @@ export async function verifyUserInclusion(
 // Admin actions (epoch submission / refresh) — operator console only
 // ---------------------------------------------------------------------------
 export async function triggerEpochRefresh(): Promise<{ success: boolean; epoch_id?: string; message?: string }> {
-    return apiFetch('/api/epoch/refresh', { method: 'POST' });
+    return apiFetch('/api/workflow/full', { method: 'POST', body: JSON.stringify({ skipProof: false }) });
 }
 
-export async function submitEpochToRegistry(epochId: string): Promise<{ success: boolean; tx_id?: string; message?: string }> {
-    return apiFetch('/api/epoch/submit', {
-        method: 'POST',
-        body: JSON.stringify({ epoch_id: epochId }),
-    });
+export async function submitEpochToRegistry(): Promise<{ success: boolean; tx_id?: string; message?: string }> {
+    const res = await apiFetch<{ success: boolean; txHash?: string; message?: string }>('/api/proof/submit', { method: 'POST' });
+    return { success: res.success, tx_id: res.txHash, message: res.message };
 }
 
 // ---------------------------------------------------------------------------
@@ -212,6 +210,14 @@ function normaliseEpochState(raw: Record<string, unknown>): EpochState {
         anchored_at: raw.anchored_at != null ? parseTimestampOrZero(raw.anchored_at) : undefined,
         rule_version_used: raw.rule_version_used != null ? str(raw.rule_version_used) : undefined,
         reason_codes: Array.isArray(raw.reason_codes) ? (raw.reason_codes as string[]) : undefined,
+        anchor_metadata: isObject(raw.anchor_metadata) ? (raw.anchor_metadata as import('@/types/solvency').AnchorMetadata) : undefined,
+        decision_result: isObject(raw.decision_result) ? (raw.decision_result as import('@/types/solvency').DecisionResult) : undefined,
+        evaluation_context: isObject(raw.evaluation_context) ? (raw.evaluation_context as import('@/types/solvency').EvaluationContext) : undefined,
+        data_source: raw.data_source != null ? (str(raw.data_source) as import('@/types/solvency').DataSource) : undefined,
+        is_fresh: raw.is_fresh != null ? bool(raw.is_fresh) : undefined,
+        is_expired: raw.is_expired != null ? bool(raw.is_expired) : undefined,
+        module: raw.module === 'solvency' ? 'solvency' : undefined,
+        source_type: raw.source_type != null ? str(raw.source_type) : undefined,
     };
 }
 
@@ -272,4 +278,8 @@ function parseTimestampOrZero(v: unknown): number {
 
 function bool(v: unknown): boolean {
     return Boolean(v);
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+    return v != null && typeof v === 'object' && !Array.isArray(v);
 }

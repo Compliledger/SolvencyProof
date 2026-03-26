@@ -11,6 +11,7 @@ import { PortalLayout } from "@/components/portal/PortalLayout";
 import { getLatestEpoch, getEpochHistory, getEpochRecord } from "@/lib/api/backend";
 import type { SolvencyEpochState, EpochHistoryItem } from "@/lib/types";
 import { buildAnchorFallback } from "@/lib/types";
+import { DataSourceBanner } from "@/components/DataSourceBanner";
 import {
     HealthStatusBadge,
     FreshnessIndicator,
@@ -186,6 +187,15 @@ export default function PublicDashboard() {
                                         validUntil={displayedEpoch.valid_until}
                                     />
                                 )}
+
+                                <DataSourceBanner
+                                    dataSource={displayedEpoch.data_source}
+                                    isFresh={displayedEpoch.is_fresh}
+                                    isExpired={displayedEpoch.is_expired}
+                                    anchoredAt={displayedEpoch.anchored_at ?? (displayedEpoch.anchor_metadata?.anchored_at ?? undefined)}
+                                    sourceType={displayedEpoch.source_type}
+                                    validUntil={displayedEpoch.valid_until}
+                                />
 
                                 {/* Hashes */}
                                 <div className="grid sm:grid-cols-2 gap-3 pt-2">

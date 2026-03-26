@@ -11,6 +11,29 @@ export type HealthStatus =
     | 'CRITICAL'
     | 'EXPIRED';
 
+/** Where the epoch state originated. */
+export type DataSource = 'LIVE_REGISTRY' | 'FALLBACK_LOCAL' | 'UNKNOWN';
+
+/** Structured health decision result. */
+export interface DecisionResult {
+    capital_backed: boolean;
+    liquidity_ready: boolean;
+    health_status: HealthStatus;
+}
+
+/** Numeric inputs and contextual metadata used by the backend to reach the decision_result. */
+export interface EvaluationContext {
+    reserves_total: number;
+    total_liabilities: number;
+    liquid_assets_total: number;
+    near_term_liabilities_total: number;
+    capital_backed: boolean;
+    liquidity_ready: boolean;
+    jurisdiction: string;
+    epoch_id: number;
+    marketproof_status: string;
+}
+
 /** A single epoch's solvency state as computed by the backend and anchored on Algorand Testnet. */
 export interface EpochState {
     entity_id: string;
@@ -40,6 +63,22 @@ export interface EpochState {
     rule_version_used?: string;
     /** Machine-readable reason codes (e.g. CAPITAL_BACKED, NOT_LIQUIDITY_READY). */
     reason_codes?: string[];
+    /** On-chain anchor metadata populated after submission to the Algorand registry. */
+    anchor_metadata?: AnchorMetadata;
+    /** Structured health decision result (capital_backed, liquidity_ready, health_status). */
+    decision_result?: DecisionResult;
+    /** Numeric inputs and context used in the financial evaluation. */
+    evaluation_context?: EvaluationContext;
+    /** Explicit data-source classification returned by the backend. */
+    data_source?: DataSource;
+    /** Whether this epoch record is currently within its validity window. */
+    is_fresh?: boolean | null;
+    /** Whether this epoch record has passed its valid_until timestamp. */
+    is_expired?: boolean | null;
+    /** Module identifier — always "solvency" when present. */
+    module?: 'solvency';
+    /** Backend source_type string (e.g. "on-chain-fallback"). */
+    source_type?: string;
 }
 
 /** Summary card shown in the public dashboard. */
