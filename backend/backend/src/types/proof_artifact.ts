@@ -12,15 +12,17 @@
  *   module              – always "solvency"
  *   entity_id           – reporting entity identifier
  *   rule_version_used   – adapter_version from the epoch object
+ *   marketproof_status  – ADMITTED / NOT_ADMITTED from the MarketProof check
  *   decision_result     – health_status string (HEALTHY / LIQUIDITY_STRESSED / …)
  *   evaluation_context  – numeric inputs used for the health decision
- *   reason_codes        – machine-readable reason codes derived from the evaluation
+ *   reason_codes        – machine-readable reason codes (MarketProof + financial)
  *   timestamp           – Unix timestamp (seconds) of epoch generation
  *   bundle_hash         – proof_hash (deterministic SHA-256 commitment)
  *   anchor_metadata     – populated after on-chain submission
  */
 
 import type { SolvencyEpochObject } from "./epoch.js";
+import type { MarketProofStatus } from "./marketproof_status.js";
 
 // ============================================================
 // TYPES
@@ -62,11 +64,19 @@ export interface UniversalProofArtifact {
   entity_id: string;
   /** Adapter/rule version used to produce this artifact */
   rule_version_used: string;
+  /**
+   * MarketProof admission status — ADMITTED if all admission checks passed
+   * before financial evaluation; NOT_ADMITTED if any check failed.
+   */
+  marketproof_status: MarketProofStatus;
   /** Health decision result (HEALTHY / LIQUIDITY_STRESSED / UNDERCOLLATERALIZED / CRITICAL) */
   decision_result: string;
   /** Numeric inputs used in the financial evaluation */
   evaluation_context: EvaluationContext;
-  /** Machine-readable reason codes explaining the decision */
+  /**
+   * Machine-readable reason codes explaining the decision.
+   * MarketProof admission codes appear first, followed by financial reason codes.
+   */
   reason_codes: string[];
   /** Unix timestamp (seconds) when the epoch was generated */
   timestamp: number;
@@ -86,7 +96,7 @@ export interface UniversalProofArtifact {
  * Positive codes indicate a condition is met; negative codes (prefixed NOT_)
  * indicate a failing condition.
  */
-function deriveReasonCodes(
+function deriveFinancialReasonCodes(
   capitalBacked: boolean,
   liquidityReady: boolean
 ): string[] {
@@ -103,6 +113,9 @@ function deriveReasonCodes(
 /**
  * Converts a canonical SolvencyEpochObject into a UniversalProofArtifact.
  *
+ * MarketProof reason codes (from the admission check) are prepended to the
+ * financial reason codes so the admission decision is always visible first.
+ *
  * @param epoch         - Canonical epoch object produced by the backend engine
  * @param anchorMetadata - Optional on-chain anchor details (populated after submit)
  */
@@ -110,11 +123,16 @@ export function toUniversalProofArtifact(
   epoch: SolvencyEpochObject,
   anchorMetadata: AnchorMetadata = {}
 ): UniversalProofArtifact {
+  // Merge MarketProof admission codes first, then financial reason codes.
+  const marketproofCodes = epoch.marketproof_reason_codes ?? [];
+  const financialCodes = deriveFinancialReasonCodes(epoch.capital_backed, epoch.liquidity_ready);
+
   return {
-    module:            "solvency",
-    entity_id:         epoch.entity_id,
-    rule_version_used: epoch.adapter_version,
-    decision_result:   epoch.health_status,
+    module:             "solvency",
+    entity_id:          epoch.entity_id,
+    rule_version_used:  epoch.adapter_version,
+    marketproof_status: epoch.marketproof_status ?? "ADMITTED",
+    decision_result:    epoch.health_status,
     evaluation_context: {
       reserves_total:              epoch.reserves_total,
       total_liabilities:           epoch.total_liabilities,
@@ -123,7 +141,7 @@ export function toUniversalProofArtifact(
       capital_backed:              epoch.capital_backed,
       liquidity_ready:             epoch.liquidity_ready,
     },
-    reason_codes:    deriveReasonCodes(epoch.capital_backed, epoch.liquidity_ready),
+    reason_codes:    [...marketproofCodes, ...financialCodes],
     timestamp:       epoch.timestamp,
     bundle_hash:     epoch.proof_hash,
     anchor_metadata: anchorMetadata,

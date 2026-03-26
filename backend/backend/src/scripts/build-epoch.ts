@@ -80,6 +80,11 @@ async function main(): Promise<void> {
   console.log(`  Timestamp:                  ${new Date(epoch.timestamp * 1000).toISOString()}`);
   console.log(`  Valid Until:                ${new Date(epoch.valid_until * 1000).toISOString()}`);
   console.log("──────────────────────────────────────────────────");
+  console.log(`  MarketProof Status:         ${epoch.marketproof_status ?? "ADMITTED"}`);
+  if (epoch.marketproof_reason_codes && epoch.marketproof_reason_codes.length > 0) {
+    console.log(`  MarketProof Codes:          ${epoch.marketproof_reason_codes.join(", ")}`);
+  }
+  console.log("──────────────────────────────────────────────────");
   console.log(`  Reserves Total:             ${epoch.reserves_total.toLocaleString()}`);
   console.log(`  Total Liabilities:          ${epoch.total_liabilities.toLocaleString()}`);
   console.log(`  Liquid Assets Total:        ${epoch.liquid_assets_total.toLocaleString()}`);

@@ -1,4 +1,5 @@
 import type { HealthStatus } from "./health.js";
+import type { MarketProofStatus } from "./marketproof_status.js";
 
 /**
  * Canonical SolvencyProof epoch object.
@@ -26,6 +27,14 @@ export interface SolvencyEpochObject {
   valid_until: number;
   adapter_version: string;
   source_type: "backend";
+  /**
+   * MarketProof admission status — set before financial evaluation.
+   * ADMITTED: all admission checks passed and financial evaluation ran.
+   * NOT_ADMITTED: one or more checks failed; financial evaluation was skipped.
+   */
+  marketproof_status?: MarketProofStatus;
+  /** Reason codes produced by the MarketProof admission evaluator. */
+  marketproof_reason_codes?: string[];
 }
 
 /**
