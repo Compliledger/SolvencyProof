@@ -3,6 +3,7 @@ import { PortalLayout } from "@/components/portal/PortalLayout";
 import { Link } from "react-router-dom";
 import SpotlightCard from "@/components/reactbits/SpotlightCard";
 import { useSolvencyProof } from "@/hooks/useSolvencyProof";
+import { getLatestEpoch } from "@/lib/api/backend";
 import {
     Shield,
     ExternalLink,
@@ -14,6 +15,7 @@ import {
     TrendingUp,
     Users,
     Wallet,
+    Droplets,
 } from "lucide-react";
 
 function GlowDot({ color = "bg-success" }: { color?: string }) {
@@ -29,6 +31,7 @@ export default function Dashboard() {
     const [healthStatus, setHealthStatus] = useState<string>("checking");
     const [epochCount, setEpochCount] = useState<number>(0);
     const [latestProof, setLatestProof] = useState<any>(null);
+    const [liquidityReady, setLiquidityReady] = useState<boolean | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     const { getHealth, getEpochCount, getOnChainProof } = useSolvencyProof();
@@ -49,9 +52,17 @@ export default function Dashboard() {
         } catch (err) {
             console.error("[Dashboard] Error fetching data:", err);
             setHealthStatus("error");
-        } finally {
-            setIsLoading(false);
         }
+
+        // Fetch liquidity status from the backend epoch API (non-critical)
+        try {
+            const epoch = await getLatestEpoch();
+            setLiquidityReady(epoch.liquidity_ready ?? null);
+        } catch {
+            // liquidity data unavailable — leave null
+        }
+
+        setIsLoading(false);
     };
 
     useEffect(() => {
@@ -101,6 +112,7 @@ export default function Dashboard() {
 
                 {/* Quick Stats */}
                 <div className="grid md:grid-cols-3 gap-4 animate-fade-in">
+                    {/* Verified Proofs — capital green */}
                     <SpotlightCard spotlightColor="rgba(74, 222, 128, 0.1)" className="bg-card/80 border-border">
                         <div className="p-6">
                             <div className="flex items-center justify-between mb-4">
@@ -116,11 +128,12 @@ export default function Dashboard() {
                         </div>
                     </SpotlightCard>
 
-                    <SpotlightCard spotlightColor="rgba(147, 51, 234, 0.1)" className="bg-card/80 border-border">
+                    {/* Coverage Ratio — capital green */}
+                    <SpotlightCard spotlightColor="rgba(74, 222, 128, 0.1)" className="bg-card/80 border-border">
                         <div className="p-6">
                             <div className="flex items-center justify-between mb-4">
-                                <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                                    <TrendingUp size={20} className="text-purple-500" />
+                                <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center">
+                                    <TrendingUp size={20} className="text-green-500" />
                                 </div>
                             </div>
                             <p className="text-3xl font-bold text-success">100%</p>
@@ -128,18 +141,33 @@ export default function Dashboard() {
                         </div>
                     </SpotlightCard>
 
-                    <SpotlightCard spotlightColor="rgba(234, 179, 8, 0.1)" className="bg-card/80 border-border">
+                    {/* Liquidity Posture — liquidity purple */}
+                    <SpotlightCard spotlightColor="rgba(147, 51, 234, 0.1)" className="bg-card/80 border-border">
                         <div className="p-6">
                             <div className="flex items-center justify-between mb-4">
-                                <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center">
-                                    <Activity size={20} className="text-yellow-500" />
+                                <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                                    <Droplets size={20} className="text-purple-500" />
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <GlowDot color="bg-success" />
-                                <p className="text-lg font-semibold">All Systems Operational</p>
-                            </div>
-                            <p className="text-sm text-muted-foreground mt-1">Real-time verification</p>
+                            {liquidityReady !== null ? (
+                                <>
+                                    <div className="flex items-center gap-2">
+                                        <GlowDot color={liquidityReady ? "bg-purple-500" : "bg-yellow-500"} />
+                                        <p className="text-lg font-semibold">
+                                            {liquidityReady ? "Ready" : "Stressed"}
+                                        </p>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground mt-1">Liquidity Posture</p>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex items-center gap-2">
+                                        <Activity size={16} className="text-purple-500" />
+                                        <p className="text-lg font-semibold text-purple-500">Live</p>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground mt-1">Liquidity Posture</p>
+                                </>
+                            )}
                         </div>
                     </SpotlightCard>
                 </div>

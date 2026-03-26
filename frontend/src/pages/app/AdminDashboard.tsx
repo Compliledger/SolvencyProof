@@ -33,6 +33,8 @@ import {
     Activity,
     Hash,
     Tag,
+    Shield,
+    Droplets,
 } from "lucide-react";
 
 function GlowDot({ color = "bg-success" }: { color?: string }) {
@@ -224,18 +226,33 @@ export default function AdminDashboard() {
                             </div>
                         )}
 
-                        {/* Capital & Liquidity cards */}
-                        <div className="grid md:grid-cols-2 gap-4 animate-fade-in">
-                            <CapitalStateCard
-                                reservesTotal={epochState.reserves_total}
-                                totalLiabilities={epochState.total_liabilities}
-                                capitalBacked={epochState.capital_backed}
-                            />
-                            <LiquidityStateCard
-                                liquidAssetsTotal={epochState.liquid_assets_total}
-                                nearTermLiabilitiesTotal={epochState.near_term_liabilities_total}
-                                liquidityReady={epochState.liquidity_ready}
-                            />
+                        {/* Capital & Liquidity — distinct sections */}
+                        <div className="grid md:grid-cols-2 gap-6 animate-fade-in">
+                            {/* Capital Position */}
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Shield size={15} className="text-green-500" />
+                                    <h2 className="font-medium text-sm text-green-500">Capital Position</h2>
+                                </div>
+                                <CapitalStateCard
+                                    reservesTotal={epochState.reserves_total}
+                                    totalLiabilities={epochState.total_liabilities}
+                                    capitalBacked={epochState.capital_backed}
+                                />
+                            </div>
+
+                            {/* Liquidity Position */}
+                            <div className="space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <Droplets size={15} className="text-purple-500" />
+                                    <h2 className="font-medium text-sm text-purple-500">Liquidity Position</h2>
+                                </div>
+                                <LiquidityStateCard
+                                    liquidAssetsTotal={epochState.liquid_assets_total}
+                                    nearTermLiabilitiesTotal={epochState.near_term_liabilities_total}
+                                    liquidityReady={epochState.liquidity_ready}
+                                />
+                            </div>
                         </div>
 
                         {/* Anchor metadata */}
