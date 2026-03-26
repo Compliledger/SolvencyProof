@@ -4,9 +4,8 @@
 // The backend is the source of truth for all epoch state and solvency calculations.
 // The frontend MUST NOT compute solvency or liquidity values itself.
 //
-// Where a dedicated epoch endpoint exists it is called directly.
-// Where it does not yet exist, the function adapts the response from the
-// nearest existing endpoint and notes a TODO for the final backend route.
+// All routes call the registry-backed backend endpoints directly.
+// No Ethereum/contract fallback paths are retained.
 
 import { API_BASE_URL } from "./constants";
 import type {
@@ -20,9 +19,6 @@ import type {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-/** source_type value used when falling back to on-chain contract endpoints. */
-const SOURCE_ON_CHAIN_FALLBACK = "on-chain-fallback" as const;
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -43,111 +39,30 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 /**
  * Fetch the latest epoch state for the given entity from the backend.
  *
+ * Calls `GET /api/epoch/latest[?entity_id=…]`.
+ * The backend uses the Algorand adapter as the primary source and falls back
+ * to file-based state only when the adapter is unavailable.
+ *
  * @param entityId - optional entity identifier; when omitted the backend
  *   returns the default / single-entity state.
- *
- * TODO: back-end should expose `GET /api/epoch/latest[?entity_id=…]`
- *       returning a `SolvencyEpochState` object directly.
- *       Until then we adapt from the existing on-chain proof endpoints.
  */
 export async function getLatestEpoch(entityId?: string): Promise<SolvencyEpochState> {
-    // Attempt the canonical endpoint first (available once the backend is updated)
     const params = entityId ? `?entity_id=${encodeURIComponent(entityId)}` : "";
-    try {
-        return await apiFetch<SolvencyEpochState>(`/api/epoch/latest${params}`);
-    } catch {
-        // Fall back: reconstruct from existing contract-level endpoints
-        const countRes = await apiFetch<{ success: boolean; epochCount: number }>(
-            "/api/contracts/epoch-count"
-        );
-        const epochId = countRes.epochCount;
-        const proof = await apiFetch<{
-            success: boolean;
-            epochId: string;
-            liabilitiesRoot: string;
-            reservesTotal: string;
-            timestamp: number;
-            verified: boolean;
-        }>(`/api/contracts/proof/${epochId}`);
-
-        const parsedEpochId = parseInt(proof.epochId, 10);
-        return {
-            entity_id: entityId ?? "default",
-            epoch_id: !Number.isNaN(parsedEpochId) && parsedEpochId > 0 ? parsedEpochId : epochId,
-            liability_root: proof.liabilitiesRoot,
-            proof_hash: proof.liabilitiesRoot, // best available substitute until backend exposes proof_hash
-            reserves_total: proof.reservesTotal,
-            near_term_liabilities_total: 0, // not available from this endpoint
-            liquid_assets_total: 0, // not available from this endpoint
-            capital_backed: proof.verified,
-            liquidity_ready: proof.verified,
-            health_status: proof.verified ? "HEALTHY" : "CRITICAL",
-            timestamp: proof.timestamp,
-            valid_until: proof.timestamp + 86400, // assume 24-hour validity
-            source_type: SOURCE_ON_CHAIN_FALLBACK,
-        } satisfies SolvencyEpochState;
-    }
+    return apiFetch<SolvencyEpochState>(`/api/epoch/latest${params}`);
 }
 
 /**
  * Fetch the epoch history for the given entity from the backend.
  *
- * @param entityId - entity identifier
+ * Calls `GET /api/epoch/history?entity_id=…`.
+ * The backend uses the Algorand adapter as the primary source.
  *
- * TODO: back-end should expose `GET /api/epoch/history?entity_id=…`
- *       returning an array of `SolvencyEpochState` objects.
- *       Until then we enumerate from the on-chain proof endpoints.
+ * @param entityId - entity identifier
  */
 export async function getEpochHistory(entityId: string): Promise<EpochHistoryItem[]> {
-    // Attempt the canonical endpoint first
-    try {
-        return await apiFetch<EpochHistoryItem[]>(
-            `/api/epoch/history?entity_id=${encodeURIComponent(entityId)}`
-        );
-    } catch {
-        // Fall back: enumerate recent epochs from the contract
-        const countRes = await apiFetch<{ success: boolean; epochCount: number }>(
-            "/api/contracts/epoch-count"
-        );
-        const count = countRes.epochCount || 0;
-        const limit = Math.min(count, 10);
-        const promises: Promise<EpochHistoryItem | null>[] = [];
-
-        for (let i = count; i > count - limit && i >= 1; i--) {
-            promises.push(
-                apiFetch<{
-                    success: boolean;
-                    epochId: string;
-                    liabilitiesRoot: string;
-                    reservesTotal: string;
-                    timestamp: number;
-                    verified: boolean;
-                }>(`/api/contracts/proof/${i}`)
-                    .then((p): EpochHistoryItem => {
-                        const parsedId = parseInt(p.epochId, 10);
-                        return {
-                            entity_id: entityId,
-                            epoch_id: !Number.isNaN(parsedId) && parsedId > 0 ? parsedId : i,
-                            liability_root: p.liabilitiesRoot,
-                            proof_hash: p.liabilitiesRoot,
-                            reserves_total: p.reservesTotal,
-                            near_term_liabilities_total: 0,
-                            liquid_assets_total: 0,
-                            capital_backed: p.verified,
-                            liquidity_ready: p.verified,
-                            health_status: p.verified ? "HEALTHY" : "CRITICAL",
-                            timestamp: p.timestamp,
-                            valid_until: p.timestamp + 86400,
-                            source_type: SOURCE_ON_CHAIN_FALLBACK,
-                        };
-                    })
-                    .catch(() => null)
-            );
-        }
-
-        const results = await Promise.all(promises);
-        return results.filter((r): r is EpochHistoryItem => r !== null);
-    }
+    return apiFetch<EpochHistoryItem[]>(
+        `/api/epoch/history?entity_id=${encodeURIComponent(entityId)}`
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -167,9 +82,6 @@ export async function verifyUserInclusion(
     epochId?: number,
     entityId?: string
 ): Promise<UserInclusionResult> {
-    // TODO: back-end should expose `GET /api/epoch/verify-inclusion?…`
-    //       returning a `UserInclusionResult` directly.
-    //       Until then we adapt from the existing Merkle verification endpoint.
     const res = await apiFetch<{
         success: boolean;
         userId?: string;
@@ -214,7 +126,7 @@ export async function triggerRefresh(): Promise<{ success: boolean }> {
 }
 
 /**
- * Submit the latest proof to the on-chain / Algorand registry.
+ * Submit the latest proof to the Algorand registry.
  * Only call from the Admin Console.
  */
 export async function submitToRegistry(): Promise<{

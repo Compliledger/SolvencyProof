@@ -1,20 +1,15 @@
 /**
  * PublicDashboard — Public Solvency State Explorer
  *
- * Displays the latest solvency state, freshness, historical epochs,
- * proof hashes, and registry metadata for a given entity.
+ * Displays the latest registry-backed solvency state, freshness,
+ * historical epochs, proof hashes, and anchor metadata.
  *
  * No auth required — this is a public transparency page.
  */
 import { useState, useEffect, useCallback } from "react";
 import { PortalLayout } from "@/components/portal/PortalLayout";
-import {
-    fetchLatestEpochState,
-    fetchEpochHistory,
-    fetchEpochById,
-    fetchRegistryMetadata,
-} from "@/services/solvencyService";
-import type { EpochState, EpochSummary, RegistryMetadata } from "@/types/solvency";
+import { getLatestEpoch, getEpochHistory, getEpochRecord } from "@/lib/api/backend";
+import type { SolvencyEpochState, EpochHistoryItem } from "@/lib/types";
 import {
     HealthStatusBadge,
     FreshnessIndicator,
@@ -22,6 +17,7 @@ import {
     LiquidityStateCard,
     EpochHistoryTable,
     RegistryMetadataCard,
+    ReasonCodesList,
 } from "@/components/solvency";
 import SpotlightCard from "@/components/reactbits/SpotlightCard";
 import {
@@ -32,15 +28,15 @@ import {
     Hash,
     ArrowLeft,
     AlertTriangle,
+    Tag,
 } from "lucide-react";
 
 export default function PublicDashboard() {
     const [entityId, setEntityId] = useState("");
     const [activeEntityId, setActiveEntityId] = useState<string | undefined>(undefined);
-    const [latestEpoch, setLatestEpoch] = useState<EpochState | null>(null);
-    const [selectedEpoch, setSelectedEpoch] = useState<EpochState | null>(null);
-    const [history, setHistory] = useState<EpochSummary[]>([]);
-    const [registry, setRegistry] = useState<RegistryMetadata | null>(null);
+    const [latestEpoch, setLatestEpoch] = useState<SolvencyEpochState | null>(null);
+    const [selectedEpoch, setSelectedEpoch] = useState<SolvencyEpochState | null>(null);
+    const [history, setHistory] = useState<EpochHistoryItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingEpoch, setIsLoadingEpoch] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -50,15 +46,16 @@ export default function PublicDashboard() {
         setError(null);
         setSelectedEpoch(null);
         try {
-            const [epochRes, historyRes, regRes] = await Promise.allSettled([
-                fetchLatestEpochState(eid),
-                fetchEpochHistory(eid, 20),
-                fetchRegistryMetadata(eid),
-            ]);
-            if (epochRes.status === "fulfilled") setLatestEpoch(epochRes.value);
-            else setError("Could not load latest epoch state.");
-            if (historyRes.status === "fulfilled") setHistory(historyRes.value);
-            if (regRes.status === "fulfilled") setRegistry(regRes.value);
+            const epoch = await getLatestEpoch(eid);
+            setLatestEpoch(epoch);
+        } catch {
+            setError("Could not load latest epoch state.");
+        }
+        try {
+            const hist = await getEpochHistory(eid ?? "default");
+            setHistory(hist);
+        } catch {
+            setHistory([]);
         } finally {
             setIsLoading(false);
         }
@@ -73,10 +70,11 @@ export default function PublicDashboard() {
         setActiveEntityId(trimmed);
     };
 
-    const handleSelectEpoch = async (epochId: string) => {
+    const handleSelectEpoch = async (epochId: number) => {
+        const eid = activeEntityId ?? latestEpoch?.entity_id ?? "default";
         setIsLoadingEpoch(true);
         try {
-            const epoch = await fetchEpochById(epochId);
+            const epoch = await getEpochRecord(eid, epochId);
             setSelectedEpoch(epoch);
         } catch {
             setSelectedEpoch(null);
@@ -112,7 +110,7 @@ export default function PublicDashboard() {
                             Solvency State Explorer
                         </h1>
                         <p className="text-muted-foreground mt-1">
-                            Public view of verified solvency epochs anchored on Algorand.
+                            Live registry-backed solvency epochs anchored on Algorand Testnet.
                         </p>
                     </div>
                     <button
@@ -190,7 +188,7 @@ export default function PublicDashboard() {
                                 {/* Hashes */}
                                 <div className="grid sm:grid-cols-2 gap-3 pt-2">
                                     {[
-                                        { label: "Proof Hash", value: displayedEpoch.proof_hash },
+                                        { label: "Bundle Hash", value: displayedEpoch.bundle_hash ?? displayedEpoch.proof_hash },
                                         { label: "Liability Root", value: displayedEpoch.liability_root },
                                         { label: "Reserve Root", value: displayedEpoch.reserve_root },
                                         { label: "Reserve Snapshot Hash", value: displayedEpoch.reserve_snapshot_hash },
@@ -203,21 +201,51 @@ export default function PublicDashboard() {
                                         ) : null,
                                     )}
                                 </div>
+
+                                {/* Rule version */}
+                                {displayedEpoch.rule_version_used && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Rule Version: <span className="font-mono">{displayedEpoch.rule_version_used}</span>
+                                    </p>
+                                )}
                             </div>
                         </SpotlightCard>
+
+                        {/* Reason codes */}
+                        {displayedEpoch.reason_codes && displayedEpoch.reason_codes.length > 0 && (
+                            <div className="rounded-xl border border-border bg-card/50 p-5 space-y-3 animate-fade-in">
+                                <div className="flex items-center gap-2">
+                                    <Tag size={15} className="text-accent" />
+                                    <h2 className="font-medium text-sm">Reason Codes</h2>
+                                </div>
+                                <ReasonCodesList codes={displayedEpoch.reason_codes} />
+                            </div>
+                        )}
 
                         {/* Capital & Liquidity */}
                         <div className="grid md:grid-cols-2 gap-4 animate-fade-in">
                             <CapitalStateCard
-                                reservesTotal={displayedEpoch.reserves_total}
-                                totalLiabilities={displayedEpoch.total_liabilities}
+                                reservesTotal={Number(displayedEpoch.reserves_total)}
+                                totalLiabilities={Number(displayedEpoch.total_liabilities ?? 0)}
                                 capitalBacked={displayedEpoch.capital_backed}
                             />
                             <LiquidityStateCard
-                                liquidAssetsTotal={displayedEpoch.liquid_assets_total}
-                                nearTermLiabilitiesTotal={displayedEpoch.near_term_liabilities_total}
+                                liquidAssetsTotal={Number(displayedEpoch.liquid_assets_total)}
+                                nearTermLiabilitiesTotal={Number(displayedEpoch.near_term_liabilities_total)}
                                 liquidityReady={displayedEpoch.liquidity_ready}
                             />
+                        </div>
+
+                        {/* Anchor metadata */}
+                        <div className="animate-fade-in">
+                            <div className="flex items-center gap-2 mb-3">
+                                <Hash size={16} className="text-muted-foreground" />
+                                <h2 className="font-medium">Algorand Anchor</h2>
+                            </div>
+                            <RegistryMetadataCard anchor={displayedEpoch.anchor_metadata ?? (displayedEpoch.anchored_at ? {
+                                anchored_at: displayedEpoch.anchored_at,
+                                network: "testnet",
+                            } : null)} />
                         </div>
                     </>
                 )}
@@ -234,15 +262,6 @@ export default function PublicDashboard() {
                         onSelectEpoch={handleSelectEpoch}
                         selectedEpochId={selectedEpoch?.epoch_id}
                     />
-                </div>
-
-                {/* Registry metadata */}
-                <div className="animate-fade-in">
-                    <div className="flex items-center gap-2 mb-3">
-                        <Hash size={16} className="text-muted-foreground" />
-                        <h2 className="font-medium">Registry Metadata</h2>
-                    </div>
-                    <RegistryMetadataCard registry={registry} />
                 </div>
             </div>
         </PortalLayout>

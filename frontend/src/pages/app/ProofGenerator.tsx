@@ -288,7 +288,7 @@ export default function ProofGenerator() {
                                         className="btn-secondary w-full mt-4"
                                     >
                                         <ExternalLink size={16} />
-                                        View on Etherscan
+                                        View on Algorand Explorer
                                     </a>
                                 </div>
                             )}
@@ -309,7 +309,7 @@ export default function ProofGenerator() {
                     <div className="p-6">
                         <h3 className="font-medium mb-4 flex items-center gap-2">
                             <Shield size={18} className="text-blue-500" />
-                            Smart Contracts (Sepolia)
+                            Algorand Registry
                         </h3>
                         <div className="space-y-3">
                             <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 border border-border">

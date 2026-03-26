@@ -3,7 +3,6 @@ import { PortalLayout } from "@/components/portal/PortalLayout";
 import { Link } from "react-router-dom";
 import SpotlightCard from "@/components/reactbits/SpotlightCard";
 import { useSolvencyProof } from "@/hooks/useSolvencyProof";
-import { CONTRACTS } from "@/lib/api/constants";
 import {
     Shield,
     ExternalLink,
@@ -211,13 +210,13 @@ export default function Dashboard() {
                             </div>
                             <div className="flex items-center gap-3">
                                 <a
-                                    href={`https://sepolia.etherscan.io/address/${CONTRACTS.REGISTRY}`}
+                                    href="https://explorer.perawallet.app"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="btn-secondary text-sm"
                                 >
                                     <ExternalLink size={14} />
-                                    View on Etherscan
+                                    Algorand Testnet
                                 </a>
                                 <button onClick={fetchData} className="btn-secondary text-sm">
                                     <RefreshCw size={14} />

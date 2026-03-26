@@ -23,11 +23,12 @@ import {
     Hash,
     Loader2,
     Database,
+    Tag,
 } from "lucide-react";
 import { verifyUserInclusion, verifyStoredRecord } from "@/lib/api/backend";
-import { MOCK_USER_IDS } from "@/lib/api/mock";
 import type { UserInclusionResult, VerificationResult } from "@/lib/types";
 import { DataSourceBanner } from "@/components/DataSourceBanner";
+import { ReasonCodesList, AnchorMetadataCard } from "@/components/solvency";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -437,30 +438,17 @@ export default function UserVerification({
                             </ul>
                         </div>
 
-                        {/* Demo users */}
+                        {/* Test users */}
                         <div className="rounded-xl border border-border bg-secondary/20 p-6 animate-fade-in">
-                            <h4 className="font-medium mb-3">Demo User IDs</h4>
-                            <p className="text-sm text-muted-foreground mb-4">
-                                These demo accounts are included in the test liability tree:
+                            <h4 className="font-medium mb-3">About Inclusion Verification</h4>
+                            <p className="text-sm text-muted-foreground">
+                                Enter any user or account ID to check whether it is included in the
+                                liability commitment for the latest epoch.
                             </p>
-                            <div className="space-y-2">
-                                {MOCK_USER_IDS.map((user) => (
-                                    <button
-                                        key={user}
-                                        onClick={() => {
-                                            setUserId(user);
-                                            setResult(null);
-                                            setError(null);
-                                        }}
-                                        className="w-full p-3 rounded-lg bg-secondary/50 border border-border hover:border-purple-500/30 hover:bg-purple-500/5 transition-all text-left"
-                                    >
-                                        <span className="font-mono text-sm">{user}</span>
-                                    </button>
-                                ))}
-                            </div>
-                            <p className="text-xs text-muted-foreground mt-4">
-                                These users are only present when the Merkle tree has been built from
-                                the test dataset.
+                            <p className="text-xs text-muted-foreground mt-3">
+                                User IDs must match the identifiers committed to the Merkle tree
+                                during epoch generation. Leave the Epoch ID blank to check against
+                                the latest epoch.
                             </p>
                         </div>
                     </div>
@@ -646,7 +634,7 @@ export default function UserVerification({
 
                                     {/* Record metadata */}
                                     {recResult.record && (
-                                        <div className="space-y-3 text-sm">
+                                        <div className="space-y-4 text-sm">
                                             <p className="text-xs text-muted-foreground uppercase tracking-wider">
                                                 Record Metadata
                                             </p>
@@ -680,7 +668,7 @@ export default function UserVerification({
                                                 {recResult.record.anchored_at !== undefined && (
                                                     <div className="p-3 rounded-lg bg-secondary/30 border border-border">
                                                         <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
-                                                            Anchored
+                                                            Anchored On-Chain
                                                         </p>
                                                         <p className="text-xs">
                                                             {new Date(
@@ -689,18 +677,32 @@ export default function UserVerification({
                                                         </p>
                                                     </div>
                                                 )}
+                                                {recResult.record.rule_version_used && (
+                                                    <div className="p-3 rounded-lg bg-secondary/30 border border-border">
+                                                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                                            Rule Version
+                                                        </p>
+                                                        <p className="font-mono text-xs">
+                                                            {recResult.record.rule_version_used}
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
+
+                                            {/* Bundle hash */}
                                             <div>
                                                 <div className="flex items-center gap-1.5 mb-1">
                                                     <Hash size={13} className="text-muted-foreground" />
                                                     <p className="text-xs text-muted-foreground uppercase tracking-wider">
-                                                        Proof Hash
+                                                        Bundle Hash
                                                     </p>
                                                 </div>
                                                 <p className="font-mono text-xs break-all bg-secondary/30 p-2 rounded-lg border border-border">
-                                                    {recResult.record.proof_hash}
+                                                    {recResult.record.bundle_hash ?? recResult.record.proof_hash}
                                                 </p>
                                             </div>
+
+                                            {/* Liability root */}
                                             <div>
                                                 <div className="flex items-center gap-1.5 mb-1">
                                                     <Hash size={13} className="text-muted-foreground" />
@@ -712,6 +714,29 @@ export default function UserVerification({
                                                     {recResult.record.liability_root}
                                                 </p>
                                             </div>
+
+                                            {/* Reason codes */}
+                                            {recResult.record.reason_codes && recResult.record.reason_codes.length > 0 && (
+                                                <div>
+                                                    <div className="flex items-center gap-1.5 mb-2">
+                                                        <Tag size={13} className="text-muted-foreground" />
+                                                        <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                                                            Reason Codes
+                                                        </p>
+                                                    </div>
+                                                    <ReasonCodesList codes={recResult.record.reason_codes} />
+                                                </div>
+                                            )}
+
+                                            {/* Anchor metadata */}
+                                            {(recResult.record.anchor_metadata || recResult.record.anchored_at) && (
+                                                <AnchorMetadataCard
+                                                    anchor={recResult.record.anchor_metadata ?? {
+                                                        anchored_at: recResult.record.anchored_at,
+                                                        network: "testnet",
+                                                    }}
+                                                />
+                                            )}
                                         </div>
                                     )}
 

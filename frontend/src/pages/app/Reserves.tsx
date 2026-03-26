@@ -220,7 +220,7 @@ export default function Reserves() {
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="p-2 rounded-lg hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground inline-flex"
-                                                title="View on Etherscan"
+                                                title="View on Algorand Explorer"
                                             >
                                                 <ExternalLink size={16} />
                                             </a>

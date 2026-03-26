@@ -168,7 +168,7 @@ export default function ReportDetail() {
                                 className="btn-primary"
                             >
                                 <ExternalLink size={16} />
-                                View on Etherscan
+                                View on Algorand Explorer
                             </a>
                             <Link to="/inclusion" className="btn-secondary">
                                 <Shield size={16} />
@@ -192,7 +192,7 @@ export default function ReportDetail() {
                             Verification method: <span className="text-foreground">Groth16 ZK-SNARK</span>
                         </p>
                         <p className="text-sm text-muted-foreground mt-1">
-                            Network: <span className="text-foreground">Sepolia Testnet</span>
+                            Network: <span className="text-foreground">Algorand Testnet</span>
                         </p>
                     </div>
                 </div>

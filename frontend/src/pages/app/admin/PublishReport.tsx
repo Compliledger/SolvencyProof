@@ -323,9 +323,8 @@ export default function PublishReport() {
                                             onChange={(e) => updateDraft("network", e.target.value)}
                                             className="w-full p-3 rounded-lg bg-secondary/30 border border-border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                                         >
-                                            <option value="ethereum-mainnet">Ethereum Mainnet</option>
-                                            <option value="ethereum-sepolia">Ethereum Sepolia</option>
-                                            <option value="polygon-mainnet">Polygon Mainnet</option>
+                                            <option value="algorand-testnet">Algorand Testnet</option>
+                                            <option value="algorand-mainnet">Algorand Mainnet</option>
                                         </select>
                                     </div>
                                 </div>

@@ -1,8 +1,8 @@
 // Public Dashboard — lets anyone query an entity's solvency health, view
 // freshness / expiration, browse epoch history, and inspect proof metadata.
 //
-// This component is READ-ONLY and consumes canonical epoch state from the
-// backend service layer.  It MUST NOT perform any solvency calculations.
+// This component is READ-ONLY and consumes registry-backed epoch state from
+// the backend service layer.  It MUST NOT perform any solvency calculations.
 
 import { useState, useCallback } from "react";
 import SpotlightCard from "@/components/reactbits/SpotlightCard";
@@ -19,10 +19,12 @@ import {
     Hash,
     Loader2,
     History,
+    Tag,
 } from "lucide-react";
 import { getLatestEpoch, getEpochHistory } from "@/lib/api/backend";
 import type { SolvencyEpochState, EpochHistoryItem, HealthStatus } from "@/lib/types";
 import { DataSourceBanner } from "@/components/DataSourceBanner";
+import { ReasonCodesList, AnchorMetadataCard } from "@/components/solvency";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -256,8 +258,8 @@ export default function PublicDashboard() {
                     Public Solvency Dashboard
                 </h1>
                 <p className="text-muted-foreground">
-                    Query any entity to view its latest solvency health, proof metadata, and
-                    epoch history.
+                    Query any entity to view its live registry-backed solvency health, proof
+                    metadata, and epoch history anchored on Algorand Testnet.
                 </p>
             </div>
 
@@ -404,9 +406,9 @@ export default function PublicDashboard() {
                         <div className="space-y-3 divide-y divide-border text-sm">
                             <div>
                                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
-                                    Proof Hash
+                                    Bundle Hash
                                 </p>
-                                <p className="font-mono break-all">{epoch.proof_hash}</p>
+                                <p className="font-mono break-all">{epoch.bundle_hash ?? epoch.proof_hash}</p>
                             </div>
                             <div className="pt-3">
                                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
@@ -424,15 +426,42 @@ export default function PublicDashboard() {
                                     </p>
                                 </div>
                             )}
+                            {epoch.rule_version_used && (
+                                <div className="pt-3">
+                                    <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                        Rule Version
+                                    </p>
+                                    <p className="font-mono">{epoch.rule_version_used}</p>
+                                </div>
+                            )}
                             {epoch.source_type && (
                                 <div className="pt-3">
                                     <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
-                                        Registry Source
+                                        Data Source
                                     </p>
-                                    <p className="capitalize">{epoch.source_type}</p>
+                                    <p className="capitalize">{epoch.source_type.replace(/-/g, ' ')}</p>
                                 </div>
                             )}
                         </div>
+                    </div>
+
+                    {/* Reason codes */}
+                    {epoch.reason_codes && epoch.reason_codes.length > 0 && (
+                        <div className="rounded-xl border border-border bg-card/50 p-6 space-y-3 animate-fade-in">
+                            <h2 className="font-display font-medium flex items-center gap-2">
+                                <Tag size={16} className="text-accent" />
+                                Reason Codes
+                            </h2>
+                            <ReasonCodesList codes={epoch.reason_codes} />
+                        </div>
+                    )}
+
+                    {/* Anchor metadata */}
+                    <div className="animate-fade-in">
+                        <AnchorMetadataCard anchor={epoch.anchor_metadata ?? (epoch.anchored_at ? {
+                            anchored_at: epoch.anchored_at,
+                            network: "testnet",
+                        } : null)} />
                     </div>
 
                     {/* Epoch history */}
