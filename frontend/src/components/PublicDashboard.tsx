@@ -23,6 +23,7 @@ import {
 import { getLatestEpoch, getEpochHistory } from "@/lib/api/backend";
 import type { SolvencyEpochState, EpochHistoryItem, HealthStatus } from "@/lib/types";
 import { DataSourceBanner } from "@/components/DataSourceBanner";
+import { CapitalStateCard, LiquidityStateCard } from "@/components/solvency";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -363,30 +364,6 @@ export default function PublicDashboard() {
                             <dl className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                                 <div>
                                     <dt className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
-                                        Capital Backed
-                                    </dt>
-                                    <dd
-                                        className={
-                                            epoch.capital_backed ? "text-success font-medium" : "text-destructive font-medium"
-                                        }
-                                    >
-                                        {epoch.capital_backed ? "Yes" : "No"}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
-                                        Liquidity Ready
-                                    </dt>
-                                    <dd
-                                        className={
-                                            epoch.liquidity_ready ? "text-success font-medium" : "text-yellow-500 font-medium"
-                                        }
-                                    >
-                                        {epoch.liquidity_ready ? "Yes" : "No"}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
                                         Recorded
                                     </dt>
                                     <dd>{formatTs(epoch.timestamp)}</dd>
@@ -394,6 +371,20 @@ export default function PublicDashboard() {
                             </dl>
                         </div>
                     </SpotlightCard>
+
+                    {/* Capital & Liquidity */}
+                    <div className="grid md:grid-cols-2 gap-4 animate-fade-in">
+                        <CapitalStateCard
+                            reservesTotal={Number(epoch.reserves_total)}
+                            totalLiabilities={Number(epoch.total_liabilities ?? 0)}
+                            capitalBacked={epoch.capital_backed}
+                        />
+                        <LiquidityStateCard
+                            liquidAssetsTotal={Number(epoch.liquid_assets_total)}
+                            nearTermLiabilitiesTotal={Number(epoch.near_term_liabilities_total)}
+                            liquidityReady={epoch.liquidity_ready}
+                        />
+                    </div>
 
                     {/* Proof metadata */}
                     <div className="rounded-xl border border-border bg-card/50 p-6 space-y-3 animate-fade-in">

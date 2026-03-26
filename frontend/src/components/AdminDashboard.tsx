@@ -22,6 +22,7 @@ import {
 import { getLatestEpoch, triggerRefresh, submitToRegistry } from "@/lib/api/backend";
 import type { SolvencyEpochState, HealthStatus } from "@/lib/types";
 import { DataSourceBanner } from "@/components/DataSourceBanner";
+import { CapitalStateCard, LiquidityStateCard } from "@/components/solvency";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -301,45 +302,18 @@ export default function AdminDashboard({ entityId }: AdminDashboardProps) {
                 </div>
             </SpotlightCard>
 
-            {/* Key metrics grid */}
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-fade-in">
-                <SpotlightCard spotlightColor="rgba(74,222,128,0.08)" className="bg-card/80 border-border">
-                    <div className="p-5 space-y-1">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wider">Reserves Total</p>
-                        <p className="text-2xl font-bold">
-                            {Number(epoch.reserves_total).toLocaleString()}
-                        </p>
-                    </div>
-                </SpotlightCard>
-
-                {epoch.total_liabilities !== undefined && (
-                    <SpotlightCard spotlightColor="rgba(147,51,234,0.08)" className="bg-card/80 border-border">
-                        <div className="p-5 space-y-1">
-                            <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Liabilities</p>
-                            <p className="text-2xl font-bold">
-                                {Number(epoch.total_liabilities).toLocaleString()}
-                            </p>
-                        </div>
-                    </SpotlightCard>
-                )}
-
-                <SpotlightCard spotlightColor="rgba(234,179,8,0.08)" className="bg-card/80 border-border">
-                    <div className="p-5 space-y-1">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wider">Liquid Assets</p>
-                        <p className="text-2xl font-bold">
-                            {Number(epoch.liquid_assets_total).toLocaleString()}
-                        </p>
-                    </div>
-                </SpotlightCard>
-
-                <SpotlightCard spotlightColor="rgba(234,179,8,0.08)" className="bg-card/80 border-border">
-                    <div className="p-5 space-y-1">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wider">Near-Term Liabilities</p>
-                        <p className="text-2xl font-bold">
-                            {Number(epoch.near_term_liabilities_total).toLocaleString()}
-                        </p>
-                    </div>
-                </SpotlightCard>
+            {/* Capital & Liquidity cards */}
+            <div className="grid md:grid-cols-2 gap-4 animate-fade-in">
+                <CapitalStateCard
+                    reservesTotal={Number(epoch.reserves_total)}
+                    totalLiabilities={Number(epoch.total_liabilities ?? 0)}
+                    capitalBacked={epoch.capital_backed}
+                />
+                <LiquidityStateCard
+                    liquidAssetsTotal={Number(epoch.liquid_assets_total)}
+                    nearTermLiabilitiesTotal={Number(epoch.near_term_liabilities_total)}
+                    liquidityReady={epoch.liquidity_ready}
+                />
             </div>
 
             {/* Proof hashes */}
