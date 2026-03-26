@@ -103,6 +103,11 @@ app.get("/health", (_req: Request, res: Response) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// GET /api/health – canonical API-namespaced health endpoint
+app.get("/api/health", (_req: Request, res: Response) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 // ============================================
 // Liabilities Endpoints
 // ============================================
@@ -1552,6 +1557,7 @@ app.listen(Number(PORT), HOST, () => {
 ║  Endpoints:                                                   ║
 ║  ─────────────────────────────────────────────────────────────║
 ║  GET  /health                    - Health check               ║
+║  GET  /api/health                - Health check (API prefix)  ║
 ║  ─────────────────────────────────────────────────────────────║
 ║  GET  /api/liabilities           - Get liabilities data       ║
 ║  POST /api/liabilities/build     - Build Merkle tree          ║

@@ -22,6 +22,11 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// API-namespaced health endpoint
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 // Liabilities endpoint
 app.get("/api/liabilities", (_req, res) => {
   try {
@@ -145,6 +150,13 @@ describe("SolvencyProof API", () => {
   describe("Health Check", () => {
     it("should return ok status", async () => {
       const res = await request(app).get("/health");
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe("ok");
+      expect(res.body.timestamp).toBeDefined();
+    });
+
+    it("GET /api/health should return ok status", async () => {
+      const res = await request(app).get("/api/health");
       expect(res.status).toBe(200);
       expect(res.body.status).toBe("ok");
       expect(res.body.timestamp).toBeDefined();
