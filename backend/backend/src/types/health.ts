@@ -1,16 +1,19 @@
 /**
- * Four-state health status derived from capital backing and liquidity readiness.
+ * Four-state health status derived from capital backing and liquidity readiness,
+ * plus EXPIRED when the epoch has passed its validity window.
  *
  * HEALTHY             – capital_backed && liquidity_ready
  * LIQUIDITY_STRESSED  – capital_backed && !liquidity_ready
  * UNDERCOLLATERALIZED – !capital_backed && liquidity_ready
  * CRITICAL            – !capital_backed && !liquidity_ready
+ * EXPIRED             – epoch is past its valid_until timestamp
  */
 export type HealthStatus =
   | "HEALTHY"
   | "LIQUIDITY_STRESSED"
   | "UNDERCOLLATERALIZED"
-  | "CRITICAL";
+  | "CRITICAL"
+  | "EXPIRED";
 
 export interface HealthEvaluation {
   capital_backed: boolean;

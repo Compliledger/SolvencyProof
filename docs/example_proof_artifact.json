@@ -1,0 +1,34 @@
+{
+  "module": "solvency",
+  "entity_id": "compliledger-demo-entity",
+  "rule_version_used": "backend-v1",
+  "decision_result": {
+    "capital_backed": true,
+    "liquidity_ready": true,
+    "health_status": "HEALTHY"
+  },
+  "evaluation_context": {
+    "reserves_total": 12500000,
+    "total_liabilities": 9800000,
+    "liquid_assets_total": 11000000,
+    "near_term_liabilities_total": 4200000,
+    "capital_backed": true,
+    "liquidity_ready": true,
+    "jurisdiction": "US",
+    "epoch_id": 42,
+    "marketproof_status": "VERIFIED"
+  },
+  "reason_codes": [
+    "CAPITAL_BACKED",
+    "LIQUIDITY_READY"
+  ],
+  "timestamp": 1743016800,
+  "bundle_hash": "a3f9c2e14b7d85091f64c3a2e8b71d6f5c9e20a14b3c7d9e8f0a12345678abcd",
+  "anchor_metadata": {
+    "anchored": true,
+    "network": "testnet",
+    "application_id": "740271610",
+    "transaction_id": "TXID4X2YZ3ABCDEF7890ALGORANDTESTNET12345EXAMPLETRANSACTION",
+    "anchored_at": 1743016920
+  }
+}

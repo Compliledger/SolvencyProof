@@ -133,7 +133,7 @@ async function main(): Promise<void> {
 
   const proofArtifact = toUniversalProofArtifact(epoch);
   kv("Module",            proofArtifact.module);
-  kv("Decision Result",   proofArtifact.decision_result);
+  kv("Decision Result",   `health_status=${proofArtifact.decision_result.health_status} capital_backed=${proofArtifact.decision_result.capital_backed} liquidity_ready=${proofArtifact.decision_result.liquidity_ready}`);
   kv("Reason Codes",      proofArtifact.reason_codes.join(", "));
   kv("Bundle Hash",       proofArtifact.bundle_hash);
 

@@ -29,20 +29,35 @@ export type FreshnessState = "FRESH" | "EXPIRED" | "UNKNOWN";
 /**
  * On-chain anchor details populated after successful submission to the
  * Algorand registry (SolventRegistry contract on Algorand Testnet).
+ *
+ * Conforms to the CompliLedger Universal Proof Artifact Schema:
+ * { anchored, network, application_id, transaction_id, anchored_at }
  */
 export interface AnchorMetadata {
-    /** Algorand transaction ID of the confirmed on-chain submission */
-    tx_id?: string;
-    /** On-chain application ID (SolventRegistry contract) */
-    app_id?: string;
+    /** Whether the epoch has been anchored on-chain */
+    anchored: boolean;
     /** Network identifier, e.g. "testnet" or "mainnet" */
-    network?: string;
-    /** Unix timestamp (seconds) when the epoch was confirmed on-chain */
-    anchored_at?: number;
+    network: string;
+    /** On-chain application ID (SolventRegistry contract) */
+    application_id: string;
+    /** Algorand transaction ID of the confirmed on-chain submission */
+    transaction_id: string;
+    /** Unix timestamp (seconds) when the epoch was confirmed on-chain, or null */
+    anchored_at: number | null;
 }
 
 /**
- * Numeric inputs used by the backend to reach the decision_result.
+ * Structured health decision result.
+ * Contains the two boolean flags that drive the health_status.
+ */
+export interface DecisionResult {
+    capital_backed: boolean;
+    liquidity_ready: boolean;
+    health_status: HealthStatus;
+}
+
+/**
+ * Numeric inputs and contextual metadata used by the backend to reach the decision_result.
  * All monetary amounts are in their native units (same as the backend).
  */
 export interface EvaluationContext {
@@ -52,6 +67,12 @@ export interface EvaluationContext {
     near_term_liabilities_total: number;
     capital_backed: boolean;
     liquidity_ready: boolean;
+    /** Regulatory jurisdiction of the reporting entity (empty string when not set) */
+    jurisdiction: string;
+    /** Epoch identifier associated with this evaluation */
+    epoch_id: number;
+    /** Market-proof integration status (e.g. "VERIFIED", "PENDING", "UNKNOWN") */
+    marketproof_status: string;
 }
 
 export interface SolvencyEpochState {
@@ -103,9 +124,9 @@ export interface SolvencyEpochState {
     module?: "solvency";
     /** Adapter/rule version used to produce this artifact */
     rule_version_used?: string;
-    /** Health decision result string (same as health_status, kept for artifact traceability) */
-    decision_result?: string;
-    /** Numeric inputs used in the financial evaluation */
+    /** Structured health decision result (capital_backed, liquidity_ready, health_status) */
+    decision_result?: DecisionResult;
+    /** Numeric inputs and context used in the financial evaluation */
     evaluation_context?: EvaluationContext;
     /** Machine-readable reason codes explaining the decision (e.g. CAPITAL_BACKED, NOT_LIQUIDITY_READY) */
     reason_codes?: string[];
@@ -149,7 +170,7 @@ export interface UserInclusionResult {
  * Returns true when `unixSeconds` is a valid, positive Unix timestamp.
  * Used by display components to guard against missing or zero-value timestamps.
  */
-export function hasValidTimestamp(unixSeconds: number | undefined): unixSeconds is number {
+export function hasValidTimestamp(unixSeconds: number | undefined | null): unixSeconds is number {
     return typeof unixSeconds === 'number' && unixSeconds > 0;
 }
 
@@ -161,5 +182,11 @@ export function hasValidTimestamp(unixSeconds: number | undefined): unixSeconds 
  */
 export function buildAnchorFallback(anchored_at: number | undefined): AnchorMetadata | null {
     if (!hasValidTimestamp(anchored_at)) return null;
-    return { anchored_at, network: 'testnet' };
+    return {
+        anchored:       true,
+        network:        'testnet',
+        application_id: '',
+        transaction_id: '',
+        anchored_at,
+    };
 }

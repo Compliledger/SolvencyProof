@@ -18,7 +18,7 @@ function formatDate(unixSeconds: number | undefined): string {
 }
 
 export function AnchorMetadataCard({ anchor, className = '' }: AnchorMetadataCardProps) {
-    const hasAnchor = anchor && (anchor.tx_id || anchor.app_id || anchor.anchored_at);
+    const hasAnchor = anchor && (anchor.transaction_id || anchor.application_id || anchor.anchored_at);
 
     if (!hasAnchor) {
         return (
@@ -56,41 +56,41 @@ export function AnchorMetadataCard({ anchor, className = '' }: AnchorMetadataCar
                         <dt className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
                             Anchored At
                         </dt>
-                        <dd>{formatDate(anchor.anchored_at)}</dd>
+                        <dd>{formatDate(anchor.anchored_at ?? undefined)}</dd>
                     </div>
                 )}
-                {anchor.app_id && (
+                {anchor.application_id && (
                     <div>
                         <dt className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
                             Application ID
                         </dt>
                         <dd>
                             <a
-                                href={getAlgorandAppUrl(anchor.app_id)}
+                                href={getAlgorandAppUrl(anchor.application_id)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-1 font-mono text-accent hover:underline"
                             >
                                 <Hash size={12} />
-                                {anchor.app_id}
+                                {anchor.application_id}
                                 <ExternalLink size={11} className="opacity-60" />
                             </a>
                         </dd>
                     </div>
                 )}
-                {anchor.tx_id && (
+                {anchor.transaction_id && (
                     <div className="sm:col-span-2">
                         <dt className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
                             Transaction ID
                         </dt>
                         <dd>
                             <a
-                                href={getAlgorandTxUrl(anchor.tx_id)}
+                                href={getAlgorandTxUrl(anchor.transaction_id)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="flex items-center gap-1 font-mono text-xs text-accent hover:underline break-all"
                             >
-                                {anchor.tx_id}
+                                {anchor.transaction_id}
                                 <ExternalLink size={11} className="opacity-60 shrink-0" />
                             </a>
                         </dd>

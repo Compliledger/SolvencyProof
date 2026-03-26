@@ -63,10 +63,16 @@ export interface EpochSummary {
 
 /** Algorand anchor metadata for a submitted epoch. */
 export interface AnchorMetadata {
-    tx_id?: string;
-    app_id?: string;
-    network?: string;
-    anchored_at?: number;
+    /** Whether the epoch has been anchored on-chain */
+    anchored: boolean;
+    /** Network identifier, e.g. "testnet" or "mainnet" */
+    network: string;
+    /** On-chain application ID (SolventRegistry contract) */
+    application_id: string;
+    /** Algorand transaction ID of the confirmed on-chain submission */
+    transaction_id: string;
+    /** Unix timestamp (seconds) when the epoch was confirmed on-chain, or null */
+    anchored_at: number | null;
 }
 
 /** Result of a user inclusion verification against a specific epoch's liability_root. */

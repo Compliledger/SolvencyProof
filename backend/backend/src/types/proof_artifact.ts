@@ -8,38 +8,57 @@
  * It is produced from a SolvencyEpochObject and enriched with anchor metadata
  * once the epoch has been submitted on-chain.
  *
- * Shape:
+ * Shape (CompliLedger Universal Proof Artifact Schema):
  *   module              – always "solvency"
  *   entity_id           – reporting entity identifier
  *   rule_version_used   – adapter_version from the epoch object
- *   decision_result     – health_status string (HEALTHY / LIQUIDITY_STRESSED / …)
- *   evaluation_context  – numeric inputs used for the health decision
+ *   decision_result     – { capital_backed, liquidity_ready, health_status }
+ *   evaluation_context  – numeric inputs + context used for the health decision
  *   reason_codes        – machine-readable reason codes derived from the evaluation
  *   timestamp           – Unix timestamp (seconds) of epoch generation
  *   bundle_hash         – proof_hash (deterministic SHA-256 commitment)
- *   anchor_metadata     – populated after on-chain submission
+ *   anchor_metadata     – { anchored, network, application_id, transaction_id, anchored_at }
  */
 
 import type { SolvencyEpochObject } from "./epoch.js";
+import type { HealthStatus } from "./health.js";
 
 // ============================================================
 // TYPES
 // ============================================================
 
-/** On-chain anchor details — populated after successful submission. */
-export interface AnchorMetadata {
-  /** Algorand transaction ID of the confirmed submission */
-  tx_id?: string;
-  /** On-chain application ID (SolventRegistry contract) */
-  app_id?: string;
-  /** Network identifier, e.g. "testnet" or "mainnet" */
-  network?: string;
-  /** Unix timestamp (seconds) when the epoch was confirmed on-chain */
-  anchored_at?: number;
+/**
+ * Structured health decision result.
+ * Replaces the legacy plain-string decision_result field.
+ */
+export interface DecisionResult {
+  /** Whether total reserves cover total liabilities */
+  capital_backed: boolean;
+  /** Whether liquid assets cover near-term liabilities */
+  liquidity_ready: boolean;
+  /** Composite health status derived from the two boolean flags */
+  health_status: HealthStatus;
 }
 
 /**
- * Numeric inputs used to reach the decision_result.
+ * On-chain anchor details — always present, with boolean `anchored` indicating
+ * whether the epoch has been confirmed on-chain.
+ */
+export interface AnchorMetadata {
+  /** Whether the epoch has been anchored on-chain */
+  anchored: boolean;
+  /** Network identifier, e.g. "testnet" or "mainnet" */
+  network: string;
+  /** On-chain application ID (SolventRegistry contract) */
+  application_id: string;
+  /** Algorand transaction ID of the confirmed on-chain submission */
+  transaction_id: string;
+  /** Unix timestamp (seconds) when the epoch was confirmed on-chain, or null */
+  anchored_at: number | null;
+}
+
+/**
+ * Numeric inputs and contextual metadata used to reach the decision_result.
  * All monetary amounts are in their native units (same as SolvencyEpochObject).
  */
 export interface EvaluationContext {
@@ -49,11 +68,19 @@ export interface EvaluationContext {
   near_term_liabilities_total: number;
   capital_backed: boolean;
   liquidity_ready: boolean;
+  /** Regulatory jurisdiction of the reporting entity (empty string when not set) */
+  jurisdiction: string;
+  /** Epoch identifier associated with this evaluation */
+  epoch_id: number;
+  /** Market-proof integration status (e.g. "VERIFIED", "PENDING", "UNKNOWN") */
+  marketproof_status: string;
 }
 
 /**
  * Universal proof artifact — the portable canonical representation of a
  * SolvencyProof epoch, suitable for frontend display and chain-agnostic storage.
+ *
+ * Conforms to the CompliLedger Universal Proof Artifact Schema.
  */
 export interface UniversalProofArtifact {
   /** Module identifier — always "solvency" */
@@ -62,9 +89,9 @@ export interface UniversalProofArtifact {
   entity_id: string;
   /** Adapter/rule version used to produce this artifact */
   rule_version_used: string;
-  /** Health decision result (HEALTHY / LIQUIDITY_STRESSED / UNDERCOLLATERALIZED / CRITICAL) */
-  decision_result: string;
-  /** Numeric inputs used in the financial evaluation */
+  /** Structured health decision result */
+  decision_result: DecisionResult;
+  /** Numeric inputs and context used in the financial evaluation */
   evaluation_context: EvaluationContext;
   /** Machine-readable reason codes explaining the decision */
   reason_codes: string[];
@@ -72,7 +99,7 @@ export interface UniversalProofArtifact {
   timestamp: number;
   /** Deterministic SHA-256 commitment hash linking the epoch fields */
   bundle_hash: string;
-  /** On-chain anchor metadata (populated after submission) */
+  /** On-chain anchor metadata — always structured, anchored=false before submission */
   anchor_metadata: AnchorMetadata;
 }
 
@@ -97,24 +124,62 @@ function deriveReasonCodes(
 }
 
 // ============================================================
+// ANCHOR METADATA BUILDER
+// ============================================================
+
+/**
+ * Options for on-chain anchor details passed to toUniversalProofArtifact.
+ * All fields are optional — defaults to an unanchored state.
+ */
+export interface AnchorMetadataInput {
+  transaction_id?: string;
+  application_id?: string;
+  network?: string;
+  anchored_at?: number | null;
+}
+
+/**
+ * Builds a canonical AnchorMetadata object from optional input fields.
+ * Ensures the required schema shape is always present.
+ */
+function buildAnchorMetadata(input: AnchorMetadataInput = {}): AnchorMetadata {
+  const anchoredAt = input.anchored_at ?? null;
+  return {
+    anchored:       anchoredAt !== null,
+    network:        input.network        ?? "",
+    application_id: input.application_id ?? "",
+    transaction_id: input.transaction_id ?? "",
+    anchored_at:    anchoredAt,
+  };
+}
+
+// ============================================================
 // MAPPER
 // ============================================================
 
 /**
  * Converts a canonical SolvencyEpochObject into a UniversalProofArtifact.
  *
- * @param epoch         - Canonical epoch object produced by the backend engine
- * @param anchorMetadata - Optional on-chain anchor details (populated after submit)
+ * @param epoch       - Canonical epoch object produced by the backend engine
+ * @param anchorInput - Optional on-chain anchor details (populated after submit)
+ * @param jurisdiction      - Regulatory jurisdiction of the entity (default: "")
+ * @param marketproofStatus - Market-proof integration status (default: "UNKNOWN")
  */
 export function toUniversalProofArtifact(
   epoch: SolvencyEpochObject,
-  anchorMetadata: AnchorMetadata = {}
+  anchorInput: AnchorMetadataInput = {},
+  jurisdiction = "",
+  marketproofStatus = "UNKNOWN"
 ): UniversalProofArtifact {
   return {
     module:            "solvency",
     entity_id:         epoch.entity_id,
     rule_version_used: epoch.adapter_version,
-    decision_result:   epoch.health_status,
+    decision_result: {
+      capital_backed:  epoch.capital_backed,
+      liquidity_ready: epoch.liquidity_ready,
+      health_status:   epoch.health_status,
+    },
     evaluation_context: {
       reserves_total:              epoch.reserves_total,
       total_liabilities:           epoch.total_liabilities,
@@ -122,10 +187,13 @@ export function toUniversalProofArtifact(
       near_term_liabilities_total: epoch.near_term_liabilities_total,
       capital_backed:              epoch.capital_backed,
       liquidity_ready:             epoch.liquidity_ready,
+      jurisdiction,
+      epoch_id:                    epoch.epoch_id,
+      marketproof_status:          marketproofStatus,
     },
     reason_codes:    deriveReasonCodes(epoch.capital_backed, epoch.liquidity_ready),
     timestamp:       epoch.timestamp,
     bundle_hash:     epoch.proof_hash,
-    anchor_metadata: anchorMetadata,
+    anchor_metadata: buildAnchorMetadata(anchorInput),
   };
 }

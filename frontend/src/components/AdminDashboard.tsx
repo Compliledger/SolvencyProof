@@ -278,7 +278,7 @@ export default function AdminDashboard({ entityId }: AdminDashboardProps) {
                 dataSource={epoch.data_source}
                 isFresh={epoch.is_fresh}
                 isExpired={epoch.is_expired}
-                anchoredAt={epoch.anchored_at ?? epoch.anchor_metadata?.anchored_at}
+                anchoredAt={epoch.anchored_at ?? (epoch.anchor_metadata?.anchored_at ?? undefined)}
                 sourceType={epoch.source_type}
                 validUntil={epoch.valid_until}
                 className="animate-fade-in"

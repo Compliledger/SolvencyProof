@@ -8,6 +8,8 @@ import dotenv from "dotenv";
 import { yellowNetwork as yellowClearNode } from "../services/yellow-network.js";
 import { createAlgorandAdapterClient } from "../algorand/adapter_client.js";
 import type { AlgorandAdapterPayload } from "../algorand/adapter_types.js";
+import type { UniversalProofArtifact } from "../types/proof_artifact.js";
+import type { HealthStatus } from "../types/health.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -959,13 +961,34 @@ interface NormalizedEpochState {
   liquid_assets_total: string;
   capital_backed: boolean;
   liquidity_ready: boolean;
-  health_status: EpochHealthStatus;
+  health_status: HealthStatus;
   timestamp: number;
   valid_until: number;
   anchored_at?: number;
   anchor_metadata?: AnchorMetadata;
   adapter_version?: string;
-  source_type: string;
+  /** Module identifier — always "solvency" */
+  module: "solvency";
+  /** Adapter/rule version used to produce this artifact */
+  rule_version_used: string;
+  /** Structured health decision result */
+  decision_result: {
+    capital_backed: boolean;
+    liquidity_ready: boolean;
+    health_status: HealthStatus;
+  };
+  /** Machine-readable reason codes explaining the decision */
+  reason_codes: string[];
+  /** Deterministic SHA-256 commitment hash (alias for proof_hash) */
+  bundle_hash: string;
+  /** On-chain anchor metadata — always structured */
+  anchor_metadata: {
+    anchored: boolean;
+    network: string;
+    application_id: string;
+    transaction_id: string;
+    anchored_at: number | null;
+  };
 }
 
 /**
@@ -993,17 +1016,17 @@ function parseEpochId(raw: unknown): number {
  * timestamp) rather than from local file metadata.
  */
 function normalizeAdapterPayload(payload: AlgorandAdapterPayload): NormalizedEpochState {
-  const validStatuses: EpochHealthStatus[] = [
+  const validStatuses: HealthStatus[] = [
     "HEALTHY",
     "LIQUIDITY_STRESSED",
     "UNDERCOLLATERALIZED",
     "CRITICAL",
     "EXPIRED",
   ];
-  const healthStatus: EpochHealthStatus = validStatuses.includes(
-    payload.health_status as EpochHealthStatus
+  const healthStatus: HealthStatus = validStatuses.includes(
+    payload.health_status as HealthStatus
   )
-    ? (payload.health_status as EpochHealthStatus)
+    ? (payload.health_status as HealthStatus)
     : "CRITICAL";
 
   const anchoredAt = payload.anchored_at ?? undefined;
@@ -1037,7 +1060,26 @@ function normalizeAdapterPayload(payload: AlgorandAdapterPayload): NormalizedEpo
     anchored_at:                 anchoredAt,
     anchor_metadata:             anchorMetadata,
     adapter_version:             payload.adapter_version,
-    source_type:                 "algorand-adapter",
+    // Universal Proof Artifact Schema fields
+    module:                      "solvency",
+    rule_version_used:           payload.adapter_version ?? "",
+    decision_result: {
+      capital_backed:  payload.capital_backed,
+      liquidity_ready: payload.liquidity_ready,
+      health_status:   healthStatus,
+    },
+    reason_codes: [
+      payload.capital_backed  ? "CAPITAL_BACKED"  : "NOT_CAPITAL_BACKED",
+      payload.liquidity_ready ? "LIQUIDITY_READY" : "NOT_LIQUIDITY_READY",
+    ],
+    bundle_hash:     payload.proof_hash,
+    anchor_metadata: {
+      anchored:        payload.anchored_at != null,
+      network:         "algorand",
+      application_id:  "",
+      transaction_id:  "",
+      anchored_at:     payload.anchored_at ?? null,
+    },
   };
 }
 
@@ -1086,7 +1128,7 @@ function buildEpochStateFromFiles(entityId: string): NormalizedEpochState | null
     // Non-parseable amounts — remain false
   }
 
-  let healthStatus: EpochHealthStatus;
+  let healthStatus: HealthStatus;
   if      (capitalBacked  && liquidityReady)  healthStatus = "HEALTHY";
   else if (capitalBacked  && !liquidityReady) healthStatus = "LIQUIDITY_STRESSED";
   else if (!capitalBacked && liquidityReady)  healthStatus = "UNDERCOLLATERALIZED";
@@ -1127,7 +1169,26 @@ function buildEpochStateFromFiles(entityId: string): NormalizedEpochState | null
     timestamp,
     valid_until:                 validUntil,
     anchored_at:                 anchoredAt,
-    source_type:                 "backend",
+    // Universal Proof Artifact Schema fields
+    module:                      "solvency",
+    rule_version_used:           "backend-v1",
+    decision_result: {
+      capital_backed:  capitalBacked,
+      liquidity_ready: liquidityReady,
+      health_status:   healthStatus,
+    },
+    reason_codes: [
+      capitalBacked  ? "CAPITAL_BACKED"  : "NOT_CAPITAL_BACKED",
+      liquidityReady ? "LIQUIDITY_READY" : "NOT_LIQUIDITY_READY",
+    ],
+    bundle_hash:     proofHash,
+    anchor_metadata: {
+      anchored:        anchoredAt != null,
+      network:         "algorand",
+      application_id:  "",
+      transaction_id:  submission?.txId ?? "",
+      anchored_at:     anchoredAt ?? null,
+    },
   };
 }
 
@@ -1135,6 +1196,59 @@ function buildEpochStateFromFiles(entityId: string): NormalizedEpochState | null
 // NOTE: specific routes must be declared BEFORE /:entityId to avoid
 // Express matching "health" or "verify-stored" as an entity ID.
 // ----------------------------------------------------------------
+
+// GET /api/epoch/artifact?entity_id=<entityId>
+// Returns the latest UniversalProofArtifact for the entity.
+// Primary source: proof_artifact.json written by build-epoch (file-based).
+// Falls back to constructing an artifact from the epoch state when the
+// dedicated file is not present.
+app.get("/api/epoch/artifact", async (req: Request, res: Response) => {
+  const entityId = (req.query.entity_id as string | undefined) ?? "default";
+  try {
+    // Primary: return the pre-built proof_artifact.json file when available
+    const artifactPath = path.join(OUTPUT_DIR, "proof_artifact.json");
+    if (fs.existsSync(artifactPath)) {
+      const artifact: UniversalProofArtifact = JSON.parse(
+        fs.readFileSync(artifactPath, "utf-8")
+      );
+      return res.json(artifact);
+    }
+
+    // Fallback: construct artifact from the current epoch state
+    const state = buildEpochStateFromFiles(entityId);
+    if (!state) {
+      return res.status(404).json({
+        error: "No proof artifact available — run the full workflow first",
+      });
+    }
+
+    const artifact: UniversalProofArtifact = {
+      module:            "solvency",
+      entity_id:         state.entity_id,
+      rule_version_used: state.rule_version_used,
+      decision_result:   state.decision_result,
+      evaluation_context: {
+        reserves_total:              Number(state.reserves_total),
+        total_liabilities:           Number(state.total_liabilities ?? "0"),
+        liquid_assets_total:         Number(state.liquid_assets_total),
+        near_term_liabilities_total: Number(state.near_term_liabilities_total),
+        capital_backed:              state.capital_backed,
+        liquidity_ready:             state.liquidity_ready,
+        jurisdiction:                "",
+        epoch_id:                    state.epoch_id,
+        marketproof_status:          "UNKNOWN",
+      },
+      reason_codes:    state.reason_codes,
+      timestamp:       state.timestamp,
+      bundle_hash:     state.bundle_hash,
+      anchor_metadata: state.anchor_metadata,
+    };
+    return res.json(artifact);
+  } catch (err: unknown) {
+    const error = err as Error;
+    return res.status(500).json({ error: "Failed to read proof artifact", details: error.message });
+  }
+});
 
 // GET /api/epoch/health?entity_id=<entityId>
 app.get("/api/epoch/health", async (req: Request, res: Response) => {
@@ -1464,6 +1578,7 @@ app.listen(Number(PORT), HOST, () => {
 ║  ─────────────────────────────────────────────────────────────║
 ║  POST /api/workflow/full         - Run complete workflow      ║
 ║  ─────────────────────────────────────────────────────────────║
+║  GET  /api/epoch/artifact        - Universal proof artifact    ║
 ║  GET  /api/epoch/health          - Entity health status       ║
 ║  GET  /api/epoch/verify-stored   - Verify on-chain record     ║
 ║  GET  /api/epoch/latest          - Latest epoch state         ║

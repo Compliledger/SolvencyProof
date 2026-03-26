@@ -35,31 +35,31 @@ export function RegistryMetadataCard({ anchor, className = '' }: RegistryMetadat
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-sm">
-                {anchor.app_id && (
+                {anchor.application_id && (
                     <div>
                         <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">App ID</p>
                         <a
-                            href={getAlgorandAppUrl(anchor.app_id)}
+                            href={getAlgorandAppUrl(anchor.application_id)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-1 font-mono text-accent hover:underline"
                         >
                             <Hash size={12} />
-                            {anchor.app_id}
+                            {anchor.application_id}
                             <ExternalLink size={11} className="opacity-60" />
                         </a>
                     </div>
                 )}
-                {anchor.tx_id && (
+                {anchor.transaction_id && (
                     <div>
                         <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Transaction ID</p>
                         <a
-                            href={getAlgorandTxUrl(anchor.tx_id)}
+                            href={getAlgorandTxUrl(anchor.transaction_id)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-1 font-mono text-xs text-accent hover:underline truncate"
                         >
-                            {anchor.tx_id.slice(0, 12)}…
+                            {anchor.transaction_id.slice(0, 12)}…
                             <ExternalLink size={11} className="opacity-60 shrink-0" />
                         </a>
                     </div>
@@ -67,7 +67,7 @@ export function RegistryMetadataCard({ anchor, className = '' }: RegistryMetadat
                 {hasValidTimestamp(anchor.anchored_at) && (
                     <div className="col-span-2">
                         <p className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Anchored On-Chain</p>
-                        <p className="text-xs">{formatDate(anchor.anchored_at)}</p>
+                        <p className="text-xs">{formatDate(anchor.anchored_at ?? undefined)}</p>
                     </div>
                 )}
             </div>
