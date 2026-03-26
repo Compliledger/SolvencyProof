@@ -1,5 +1,8 @@
 // Shared solvency types — frontend is a state consumer, not a logic driver.
-// Backend computes state; Algorand is the public registry; frontend displays & verifies.
+// Backend computes state; Algorand Testnet is the public registry; frontend displays & verifies.
+//
+// These types are used by the older solvency service layer (services/solvencyService.ts)
+// and legacy page components. New code should prefer the canonical types in @/lib/types.
 
 export type HealthStatus =
     | 'HEALTHY'
@@ -8,7 +11,7 @@ export type HealthStatus =
     | 'CRITICAL'
     | 'EXPIRED';
 
-/** A single epoch's solvency state as computed by the backend and anchored on Algorand. */
+/** A single epoch's solvency state as computed by the backend and anchored on Algorand Testnet. */
 export interface EpochState {
     entity_id: string;
     epoch_id: string;
@@ -16,7 +19,9 @@ export interface EpochState {
     reserve_root: string;
     /** Hash of the raw reserve snapshot used to produce reserve_root. */
     reserve_snapshot_hash: string;
-    /** Combined proof hash anchored on Algorand. */
+    /** Combined bundle hash anchored on Algorand (alias: proof_hash). */
+    bundle_hash: string;
+    /** Legacy alias for bundle_hash. */
     proof_hash: string;
     reserves_total: number;
     total_liabilities: number;
@@ -25,10 +30,16 @@ export interface EpochState {
     capital_backed: boolean;
     liquidity_ready: boolean;
     health_status: HealthStatus;
-    /** ISO-8601 timestamp of when this epoch was computed. */
-    timestamp: string;
-    /** ISO-8601 timestamp after which this epoch is considered EXPIRED. */
-    valid_until: string;
+    /** Unix timestamp (seconds) when this epoch was computed. */
+    timestamp: number;
+    /** Unix timestamp (seconds) after which this epoch is considered EXPIRED. */
+    valid_until: number;
+    /** Unix timestamp (seconds) when anchored on Algorand Testnet. */
+    anchored_at?: number;
+    /** Adapter/rule version used to produce this state. */
+    rule_version_used?: string;
+    /** Machine-readable reason codes (e.g. CAPITAL_BACKED, NOT_LIQUIDITY_READY). */
+    reason_codes?: string[];
 }
 
 /** Summary card shown in the public dashboard. */
@@ -36,20 +47,26 @@ export interface EpochSummary {
     entity_id: string;
     epoch_id: string;
     health_status: HealthStatus;
+    /** Bundle hash anchored on Algorand. */
+    bundle_hash: string;
+    /** Legacy alias for bundle_hash. */
     proof_hash: string;
-    timestamp: string;
-    valid_until: string;
+    /** Unix timestamp (seconds) of epoch generation. */
+    timestamp: number;
+    /** Unix timestamp (seconds) after which the epoch is EXPIRED. */
+    valid_until: number;
     capital_backed: boolean;
     liquidity_ready: boolean;
+    /** Unix timestamp (seconds) when anchored on Algorand Testnet. */
+    anchored_at?: number;
 }
 
-/** Algorand registry metadata for an entity. */
-export interface RegistryMetadata {
-    entity_id: string;
-    algorand_app_id?: string;
-    algorand_address?: string;
-    last_updated: string;
-    epoch_count: number;
+/** Algorand anchor metadata for a submitted epoch. */
+export interface AnchorMetadata {
+    tx_id?: string;
+    app_id?: string;
+    network?: string;
+    anchored_at?: number;
 }
 
 /** Result of a user inclusion verification against a specific epoch's liability_root. */

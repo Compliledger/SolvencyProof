@@ -1,19 +1,19 @@
 import { ExternalLink } from 'lucide-react';
-import type { EpochSummary } from '@/types/solvency';
+import type { EpochHistoryItem } from '@/lib/types';
 import { HealthStatusBadge } from './HealthStatusBadge';
 
 interface EpochHistoryTableProps {
-    epochs: EpochSummary[];
-    onSelectEpoch?: (epochId: string) => void;
-    selectedEpochId?: string;
+    epochs: EpochHistoryItem[];
+    onSelectEpoch?: (epochId: number) => void;
+    selectedEpochId?: number;
 }
 
-function formatDate(iso: string): string {
-    if (!iso) return '—';
+function formatDate(unixSeconds: number): string {
+    if (!unixSeconds) return '—';
     try {
-        return new Date(iso).toLocaleString();
+        return new Date(unixSeconds * 1000).toLocaleString();
     } catch {
-        return iso;
+        return '—';
     }
 }
 
@@ -39,8 +39,8 @@ export function EpochHistoryTable({ epochs, onSelectEpoch, selectedEpochId }: Ep
                     <tr className="border-b border-border bg-secondary/30">
                         <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Epoch</th>
                         <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Status</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3 hidden md:table-cell">Proof Hash</th>
-                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3 hidden lg:table-cell">Timestamp</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3 hidden md:table-cell">Bundle Hash</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3 hidden lg:table-cell">Anchored / Recorded</th>
                         <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3 hidden lg:table-cell">Valid Until</th>
                         <th className="w-10 px-5 py-3" />
                     </tr>
@@ -48,6 +48,8 @@ export function EpochHistoryTable({ epochs, onSelectEpoch, selectedEpochId }: Ep
                 <tbody>
                     {epochs.map((epoch) => {
                         const isSelected = epoch.epoch_id === selectedEpochId;
+                        const bundleHash = epoch.bundle_hash ?? epoch.proof_hash;
+                        const displayTs = epoch.anchored_at ?? epoch.timestamp;
                         return (
                             <tr
                                 key={epoch.epoch_id}
@@ -64,11 +66,11 @@ export function EpochHistoryTable({ epochs, onSelectEpoch, selectedEpochId }: Ep
                                 </td>
                                 <td className="px-5 py-3 hidden md:table-cell">
                                     <span className="font-mono text-xs text-muted-foreground">
-                                        {truncateHash(epoch.proof_hash)}
+                                        {truncateHash(bundleHash)}
                                     </span>
                                 </td>
                                 <td className="px-5 py-3 hidden lg:table-cell">
-                                    <span className="text-muted-foreground text-xs">{formatDate(epoch.timestamp)}</span>
+                                    <span className="text-muted-foreground text-xs">{formatDate(displayTs)}</span>
                                 </td>
                                 <td className="px-5 py-3 hidden lg:table-cell">
                                     <span className="text-muted-foreground text-xs">{formatDate(epoch.valid_until)}</span>

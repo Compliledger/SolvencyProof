@@ -84,7 +84,7 @@ export default function Summary() {
                                 </div>
                                 <div className="p-4 rounded-lg bg-secondary/30 border border-border">
                                     <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Network</p>
-                                    <p className="font-medium">Sepolia</p>
+                                    <p className="font-medium">Algorand Testnet</p>
                                 </div>
                             </div>
                         )}
@@ -114,7 +114,7 @@ export default function Summary() {
                                 </li>
                                 <li className="flex items-start gap-3">
                                     <CheckCircle2 size={18} className="text-success mt-0.5 shrink-0" />
-                                    <span>Proof verified on-chain (Sepolia)</span>
+                                    <span>Anchored on-chain (Algorand Testnet)</span>
                                 </li>
                                 <li className="flex items-start gap-3">
                                     <CheckCircle2 size={18} className="text-success mt-0.5 shrink-0" />

@@ -90,7 +90,7 @@ export default function ReportsList() {
                             All On-Chain Proofs
                         </h1>
                         <p className="text-muted-foreground">
-                            Browse verified solvency proofs stored on Sepolia blockchain.
+                            Browse verified solvency proofs anchored on Algorand Testnet.
                         </p>
                     </div>
 
@@ -185,7 +185,7 @@ export default function ReportsList() {
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="p-2 rounded-lg hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground inline-flex"
-                                            title="View on Etherscan"
+                                            title="View on Algorand Explorer"
                                         >
                                             <ExternalLink size={16} />
                                         </a>

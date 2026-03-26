@@ -144,7 +144,7 @@ export function PortalLayout({ children }: PropsWithChildren) {
                             <span className="text-sm font-medium">{getPageTitle()}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                            <span className="text-xs text-muted-foreground">Sepolia Testnet</span>
+                            <span className="text-xs text-muted-foreground">Algorand Testnet</span>
                             <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
                         </div>
                     </div>

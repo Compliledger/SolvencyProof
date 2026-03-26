@@ -2,7 +2,7 @@
  * Frontend service layer for backend / Algorand registry queries.
  *
  * The frontend is a STATE CONSUMER:
- *   backend → Algorand registry → frontend visibility
+ *   backend → Algorand adapter → Algorand Testnet registry → frontend visibility
  *
  * All protocol logic lives in the backend.  The service layer here is
  * responsible only for fetching already-computed state and exposing it
@@ -14,7 +14,6 @@ import type {
     EpochState,
     EpochSummary,
     InclusionResult,
-    RegistryMetadata,
 } from '@/types/solvency';
 
 export const API_BASE_URL =
@@ -101,8 +100,7 @@ export function fetchBackendHealth(): Promise<BackendHealth> {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch the latest epoch state for an entity.
- * Maps backend response fields to the canonical EpochState shape.
+ * Fetch the latest epoch state for an entity from the registry-backed backend.
  */
 export async function fetchLatestEpochState(entityId?: string): Promise<EpochState> {
     const path = entityId
@@ -139,20 +137,10 @@ export async function fetchEpochHistory(
 
     if (Array.isArray(raw)) return raw.map(normaliseEpochSummary);
 
-    // Legacy: backend returns { epochs: [...] }
+    // Backend returns array directly; handle wrapped legacy shapes gracefully
     const obj = raw as Record<string, unknown>;
     const arr = obj?.epochs ?? obj?.proofs ?? [];
     return Array.isArray(arr) ? (arr as Record<string, unknown>[]).map(normaliseEpochSummary) : [];
-}
-
-// ---------------------------------------------------------------------------
-// Registry metadata (Algorand)
-// ---------------------------------------------------------------------------
-export async function fetchRegistryMetadata(entityId?: string): Promise<RegistryMetadata> {
-    const path = entityId
-        ? `/api/registry?entity_id=${encodeURIComponent(entityId)}`
-        : '/api/registry';
-    return apiFetch<RegistryMetadata>(path, undefined, `sp_svc_registry_${entityId ?? 'default'}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,9 +150,6 @@ export async function verifyUserInclusion(
     userId: string,
     epochId?: string,
 ): Promise<InclusionResult> {
-    const body: Record<string, string> = { user_id: userId };
-    if (epochId) body.epoch_id = epochId;
-
     try {
         const res = await apiFetch<Record<string, unknown>>(
             `/api/liabilities/verify/${encodeURIComponent(userId)}${epochId ? `?epoch_id=${encodeURIComponent(epochId)}` : ''}`,
@@ -206,13 +191,15 @@ export async function submitEpochToRegistry(epochId: string): Promise<{ success:
 // Normalisation helpers — absorb backend field-name variations
 // ---------------------------------------------------------------------------
 function normaliseEpochState(raw: Record<string, unknown>): EpochState {
+    const bundleHash = str(raw.bundle_hash ?? raw.proof_hash ?? raw.proofHash ?? raw.txHash ?? '');
     return {
         entity_id: str(raw.entity_id ?? raw.entityId ?? ''),
         epoch_id: str(raw.epoch_id ?? raw.epochId ?? raw.id ?? ''),
         liability_root: str(raw.liability_root ?? raw.liabilityRoot ?? raw.liabilitiesRoot ?? ''),
         reserve_root: str(raw.reserve_root ?? raw.reserveRoot ?? ''),
         reserve_snapshot_hash: str(raw.reserve_snapshot_hash ?? raw.reserveSnapshotHash ?? ''),
-        proof_hash: str(raw.proof_hash ?? raw.proofHash ?? raw.txHash ?? ''),
+        bundle_hash: bundleHash,
+        proof_hash: bundleHash,
         reserves_total: num(raw.reserves_total ?? raw.reservesTotal ?? 0),
         total_liabilities: num(raw.total_liabilities ?? raw.totalLiabilities ?? 0),
         near_term_liabilities_total: num(raw.near_term_liabilities_total ?? raw.nearTermLiabilitiesTotal ?? 0),
@@ -220,21 +207,27 @@ function normaliseEpochState(raw: Record<string, unknown>): EpochState {
         capital_backed: bool(raw.capital_backed ?? raw.capitalBacked ?? false),
         liquidity_ready: bool(raw.liquidity_ready ?? raw.liquidityReady ?? false),
         health_status: sanitiseHealthStatus(raw.health_status ?? raw.healthStatus),
-        timestamp: str(raw.timestamp ?? ''),
-        valid_until: str(raw.valid_until ?? raw.validUntil ?? ''),
+        timestamp: parseTimestampOrZero(raw.timestamp),
+        valid_until: parseTimestampOrZero(raw.valid_until ?? raw.validUntil),
+        anchored_at: raw.anchored_at != null ? parseTimestampOrZero(raw.anchored_at) : undefined,
+        rule_version_used: raw.rule_version_used != null ? str(raw.rule_version_used) : undefined,
+        reason_codes: Array.isArray(raw.reason_codes) ? (raw.reason_codes as string[]) : undefined,
     };
 }
 
 function normaliseEpochSummary(raw: Record<string, unknown>): EpochSummary {
+    const bundleHash = str(raw.bundle_hash ?? raw.proof_hash ?? raw.proofHash ?? raw.txHash ?? '');
     return {
         entity_id: str(raw.entity_id ?? raw.entityId ?? ''),
         epoch_id: str(raw.epoch_id ?? raw.epochId ?? raw.id ?? ''),
         health_status: sanitiseHealthStatus(raw.health_status ?? raw.healthStatus ?? (raw.verified ? 'HEALTHY' : 'EXPIRED')),
-        proof_hash: str(raw.proof_hash ?? raw.proofHash ?? raw.txHash ?? ''),
-        timestamp: str(raw.timestamp ?? ''),
-        valid_until: str(raw.valid_until ?? raw.validUntil ?? ''),
+        bundle_hash: bundleHash,
+        proof_hash: bundleHash,
+        timestamp: parseTimestampOrZero(raw.timestamp),
+        valid_until: parseTimestampOrZero(raw.valid_until ?? raw.validUntil),
         capital_backed: bool(raw.capital_backed ?? raw.capitalBacked ?? false),
         liquidity_ready: bool(raw.liquidity_ready ?? raw.liquidityReady ?? false),
+        anchored_at: raw.anchored_at != null ? parseTimestampOrZero(raw.anchored_at) : undefined,
     };
 }
 
@@ -260,6 +253,21 @@ function str(v: unknown): string {
 function num(v: unknown): number {
     const n = Number(v);
     return isNaN(n) ? 0 : n;
+}
+
+/**
+ * Parses a raw value as a Unix timestamp (seconds).
+ * Accepts both numeric Unix seconds and ISO-8601 strings.
+ * Returns 0 when the value is null / undefined / unparseable.
+ */
+function parseTimestampOrZero(v: unknown): number {
+    if (v == null) return 0;
+    // Accept numeric Unix timestamp directly
+    const n = Number(v);
+    if (!isNaN(n)) return n;
+    // Attempt ISO string parse
+    const d = new Date(String(v)).getTime();
+    return isNaN(d) ? 0 : Math.floor(d / 1000);
 }
 
 function bool(v: unknown): boolean {

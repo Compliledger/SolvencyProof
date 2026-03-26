@@ -1,14 +1,16 @@
 import { Clock, AlertCircle } from 'lucide-react';
 
 interface FreshnessIndicatorProps {
-    timestamp: string;
-    validUntil: string;
+    /** Unix timestamp (seconds) when the epoch was recorded */
+    timestamp: number;
+    /** Unix timestamp (seconds) after which the epoch is considered expired */
+    validUntil: number;
     className?: string;
 }
 
-function formatRelative(iso: string): string {
-    if (!iso) return 'Unknown';
-    const ms = Date.now() - new Date(iso).getTime();
+function formatRelative(unixSeconds: number): string {
+    if (!unixSeconds) return 'Unknown';
+    const ms = Date.now() - unixSeconds * 1000;
     if (ms < 0) return 'In the future';
     const secs = Math.floor(ms / 1000);
     if (secs < 60) return `${secs}s ago`;
@@ -19,9 +21,9 @@ function formatRelative(iso: string): string {
     return `${Math.floor(hours / 24)}d ago`;
 }
 
-function formatUntil(iso: string): string {
-    if (!iso) return 'Unknown';
-    const ms = new Date(iso).getTime() - Date.now();
+function formatUntil(unixSeconds: number): string {
+    if (!unixSeconds) return 'Unknown';
+    const ms = unixSeconds * 1000 - Date.now();
     if (ms <= 0) return 'Expired';
     const secs = Math.floor(ms / 1000);
     if (secs < 60) return `Expires in ${secs}s`;
@@ -33,7 +35,7 @@ function formatUntil(iso: string): string {
 }
 
 export function FreshnessIndicator({ timestamp, validUntil, className = '' }: FreshnessIndicatorProps) {
-    const isExpired = validUntil && new Date(validUntil).getTime() < Date.now();
+    const isExpired = validUntil > 0 && validUntil * 1000 < Date.now();
     return (
         <div className={`flex items-center gap-3 text-sm ${className}`}>
             <span className="flex items-center gap-1.5 text-muted-foreground">

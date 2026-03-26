@@ -26,12 +26,41 @@ export type DataSource = "LIVE_REGISTRY" | "FALLBACK_LOCAL" | "UNKNOWN";
  */
 export type FreshnessState = "FRESH" | "EXPIRED" | "UNKNOWN";
 
+/**
+ * On-chain anchor details populated after successful submission to the
+ * Algorand registry (SolventRegistry contract on Algorand Testnet).
+ */
+export interface AnchorMetadata {
+    /** Algorand transaction ID of the confirmed on-chain submission */
+    tx_id?: string;
+    /** On-chain application ID (SolventRegistry contract) */
+    app_id?: string;
+    /** Network identifier, e.g. "testnet" or "mainnet" */
+    network?: string;
+    /** Unix timestamp (seconds) when the epoch was confirmed on-chain */
+    anchored_at?: number;
+}
+
+/**
+ * Numeric inputs used by the backend to reach the decision_result.
+ * All monetary amounts are in their native units (same as the backend).
+ */
+export interface EvaluationContext {
+    reserves_total: number;
+    total_liabilities: number;
+    liquid_assets_total: number;
+    near_term_liabilities_total: number;
+    capital_backed: boolean;
+    liquidity_ready: boolean;
+}
+
 export interface SolvencyEpochState {
     entity_id: string;
     epoch_id: number;
     liability_root: string;
     reserve_root?: string;
     reserve_snapshot_hash?: string;
+    /** Combined proof hash (legacy field — see also bundle_hash) */
     proof_hash: string;
     reserves_total: number | string;
     total_liabilities?: number | string;
@@ -63,6 +92,27 @@ export interface SolvencyEpochState {
      * Provided by the backend; if absent the UI infers from valid_until.
      */
     is_expired?: boolean | null;
+
+    // -----------------------------------------------------------------------
+    // Proof artifact fields (from UniversalProofArtifact)
+    // These are populated when the epoch state is enriched with proof-artifact
+    // data from the backend, giving a full picture of the solvency evaluation.
+    // -----------------------------------------------------------------------
+
+    /** Module identifier — always "solvency" when present */
+    module?: "solvency";
+    /** Adapter/rule version used to produce this artifact */
+    rule_version_used?: string;
+    /** Health decision result string (same as health_status, kept for artifact traceability) */
+    decision_result?: string;
+    /** Numeric inputs used in the financial evaluation */
+    evaluation_context?: EvaluationContext;
+    /** Machine-readable reason codes explaining the decision (e.g. CAPITAL_BACKED, NOT_LIQUIDITY_READY) */
+    reason_codes?: string[];
+    /** Deterministic SHA-256 commitment hash linking the epoch fields (alias: proof_hash) */
+    bundle_hash?: string;
+    /** On-chain anchor metadata populated after submission to the Algorand registry */
+    anchor_metadata?: AnchorMetadata;
 }
 
 export type EpochHistoryItem = SolvencyEpochState;
@@ -89,4 +139,27 @@ export interface UserInclusionResult {
     included: boolean;
     /** Unix timestamp (seconds) when the inclusion check was performed */
     checked_at: number;
+}
+
+// ---------------------------------------------------------------------------
+// Utility helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when `unixSeconds` is a valid, positive Unix timestamp.
+ * Used by display components to guard against missing or zero-value timestamps.
+ */
+export function hasValidTimestamp(unixSeconds: number | undefined): unixSeconds is number {
+    return typeof unixSeconds === 'number' && unixSeconds > 0;
+}
+
+/**
+ * Builds a minimal AnchorMetadata object for display when only `anchored_at`
+ * is available (i.e. the full anchor_metadata field is absent from the response).
+ *
+ * Returns `null` when there is no valid anchor timestamp.
+ */
+export function buildAnchorFallback(anchored_at: number | undefined): AnchorMetadata | null {
+    if (!hasValidTimestamp(anchored_at)) return null;
+    return { anchored_at, network: 'testnet' };
 }

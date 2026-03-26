@@ -3,24 +3,25 @@
  *
  * Displays the latest backend-computed epoch state.
  * The frontend is a STATE CONSUMER — no protocol logic lives here.
- * Data flow: backend → Algorand registry → this view.
+ * Data flow: backend → Algorand adapter → Algorand Testnet registry → this view.
  */
 import { useState, useEffect, useCallback } from "react";
 import { PortalLayout } from "@/components/portal/PortalLayout";
 import {
     fetchBackendHealth,
     fetchLatestEpochState,
-    fetchRegistryMetadata,
     triggerEpochRefresh,
     submitEpochToRegistry,
 } from "@/services/solvencyService";
-import type { EpochState, RegistryMetadata } from "@/types/solvency";
+import type { EpochState } from "@/types/solvency";
+import { buildAnchorFallback } from "@/lib/types";
 import {
     HealthStatusBadge,
     FreshnessIndicator,
     CapitalStateCard,
     LiquidityStateCard,
     RegistryMetadataCard,
+    ReasonCodesList,
 } from "@/components/solvency";
 import SpotlightCard from "@/components/reactbits/SpotlightCard";
 import {
@@ -31,6 +32,7 @@ import {
     Upload,
     Activity,
     Hash,
+    Tag,
 } from "lucide-react";
 
 function GlowDot({ color = "bg-success" }: { color?: string }) {
@@ -55,7 +57,6 @@ function HashRow({ label, value }: { label: string; value: string }) {
 export default function AdminDashboard() {
     const [backendStatus, setBackendStatus] = useState<"live" | "offline" | "checking">("checking");
     const [epochState, setEpochState] = useState<EpochState | null>(null);
-    const [registry, setRegistry] = useState<RegistryMetadata | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -72,12 +73,8 @@ export default function AdminDashboard() {
         }
 
         try {
-            const [epoch, reg] = await Promise.allSettled([
-                fetchLatestEpochState(),
-                fetchRegistryMetadata(),
-            ]);
-            if (epoch.status === "fulfilled") setEpochState(epoch.value);
-            if (reg.status === "fulfilled") setRegistry(reg.value);
+            const epoch = await fetchLatestEpochState();
+            setEpochState(epoch);
         } catch {
             // partial data is fine — display what we have
         } finally {
@@ -208,13 +205,24 @@ export default function AdminDashboard() {
                                 />
 
                                 <div className="grid gap-3 pt-2">
-                                    <HashRow label="Proof Hash" value={epochState.proof_hash} />
+                                    <HashRow label="Bundle Hash" value={epochState.bundle_hash} />
                                     <HashRow label="Liability Root" value={epochState.liability_root} />
                                     <HashRow label="Reserve Root" value={epochState.reserve_root} />
                                     <HashRow label="Reserve Snapshot Hash" value={epochState.reserve_snapshot_hash} />
                                 </div>
                             </div>
                         </SpotlightCard>
+
+                        {/* Reason codes */}
+                        {epochState.reason_codes && epochState.reason_codes.length > 0 && (
+                            <div className="rounded-xl border border-border bg-card/50 p-5 space-y-3 animate-fade-in">
+                                <div className="flex items-center gap-2">
+                                    <Tag size={15} className="text-accent" />
+                                    <h2 className="font-medium text-sm">Reason Codes</h2>
+                                </div>
+                                <ReasonCodesList codes={epochState.reason_codes} />
+                            </div>
+                        )}
 
                         {/* Capital & Liquidity cards */}
                         <div className="grid md:grid-cols-2 gap-4 animate-fade-in">
@@ -230,13 +238,13 @@ export default function AdminDashboard() {
                             />
                         </div>
 
-                        {/* Registry metadata */}
+                        {/* Anchor metadata */}
                         <div className="animate-fade-in">
                             <div className="flex items-center gap-2 mb-3">
                                 <Hash size={16} className="text-muted-foreground" />
-                                <h2 className="font-medium text-sm">Algorand Registry</h2>
+                                <h2 className="font-medium text-sm">Algorand Anchor</h2>
                             </div>
-                            <RegistryMetadataCard registry={registry} />
+                            <RegistryMetadataCard anchor={buildAnchorFallback(epochState.anchored_at)} />
                         </div>
                     </>
                 )}

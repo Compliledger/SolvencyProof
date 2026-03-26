@@ -18,10 +18,13 @@ import {
     Send,
     Loader2,
     Activity,
+    Tag,
 } from "lucide-react";
 import { getLatestEpoch, triggerRefresh, submitToRegistry } from "@/lib/api/backend";
 import type { SolvencyEpochState, HealthStatus } from "@/lib/types";
+import { buildAnchorFallback } from "@/lib/types";
 import { DataSourceBanner } from "@/components/DataSourceBanner";
+import { ReasonCodesList, AnchorMetadataCard } from "@/components/solvency";
 import { CapitalStateCard, LiquidityStateCard } from "@/components/solvency";
 
 // ---------------------------------------------------------------------------
@@ -210,6 +213,7 @@ export default function AdminDashboard({ entityId }: AdminDashboardProps) {
     }
 
     const isExpired = epoch.valid_until < Math.floor(Date.now() / 1000);
+    const bundleHash = epoch.bundle_hash ?? epoch.proof_hash;
 
     return (
         <div className="max-w-5xl mx-auto space-y-8">
@@ -225,6 +229,11 @@ export default function AdminDashboard({ entityId }: AdminDashboardProps) {
                     <p className="text-muted-foreground">
                         Latest epoch state for{" "}
                         <span className="font-mono text-foreground">{epoch.entity_id}</span>
+                        {epoch.rule_version_used && (
+                            <span className="ml-2 text-xs px-2 py-0.5 rounded bg-secondary/60 border border-border font-mono">
+                                Rule v{epoch.rule_version_used}
+                            </span>
+                        )}
                     </p>
                 </div>
 
@@ -269,7 +278,7 @@ export default function AdminDashboard({ entityId }: AdminDashboardProps) {
                 dataSource={epoch.data_source}
                 isFresh={epoch.is_fresh}
                 isExpired={epoch.is_expired}
-                anchoredAt={epoch.anchored_at}
+                anchoredAt={epoch.anchored_at ?? epoch.anchor_metadata?.anchored_at}
                 sourceType={epoch.source_type}
                 validUntil={epoch.valid_until}
                 className="animate-fade-in"
@@ -316,14 +325,25 @@ export default function AdminDashboard({ entityId }: AdminDashboardProps) {
                 />
             </div>
 
-            {/* Proof hashes */}
+            {/* Reason codes */}
+            {(epoch.reason_codes && epoch.reason_codes.length > 0) && (
+                <div className="rounded-xl border border-border bg-card/50 p-6 space-y-3 animate-fade-in">
+                    <h2 className="font-display font-medium flex items-center gap-2">
+                        <Tag size={16} className="text-accent" />
+                        Reason Codes
+                    </h2>
+                    <ReasonCodesList codes={epoch.reason_codes} />
+                </div>
+            )}
+
+            {/* Bundle hash + commitment hashes */}
             <div className="rounded-xl border border-border bg-card/50 p-6 space-y-4 animate-fade-in">
                 <h2 className="font-display font-medium flex items-center gap-2">
                     <Hash size={16} className="text-accent" />
-                    Proof &amp; Commitment Hashes
+                    Bundle Hash &amp; Commitments
                 </h2>
                 <div className="space-y-3 divide-y divide-border">
-                    <HashRow label="Proof Hash" value={epoch.proof_hash} />
+                    <HashRow label="Bundle Hash" value={bundleHash} />
                     <div className="pt-3">
                         <HashRow label="Liability Root" value={epoch.liability_root} />
                     </div>
@@ -338,6 +358,15 @@ export default function AdminDashboard({ entityId }: AdminDashboardProps) {
                         </div>
                     )}
                 </div>
+            </div>
+
+            {/* Anchor metadata */}
+            <div className="animate-fade-in">
+                <h2 className="font-display font-medium flex items-center gap-2 mb-3">
+                    <Activity size={16} className="text-muted-foreground" />
+                    Algorand Anchor
+                </h2>
+                <AnchorMetadataCard anchor={epoch.anchor_metadata ?? buildAnchorFallback(epoch.anchored_at)} />
             </div>
 
             {/* Metadata */}
@@ -373,7 +402,15 @@ export default function AdminDashboard({ entityId }: AdminDashboardProps) {
                             {new Date(epoch.valid_until * 1000).toLocaleString()}
                         </dd>
                     </div>
-                    {epoch.adapter_version && (
+                    {epoch.rule_version_used && (
+                        <div>
+                            <dt className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                                Rule Version
+                            </dt>
+                            <dd className="font-mono">{epoch.rule_version_used}</dd>
+                        </div>
+                    )}
+                    {epoch.adapter_version && !epoch.rule_version_used && (
                         <div>
                             <dt className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
                                 Adapter Version
@@ -392,9 +429,9 @@ export default function AdminDashboard({ entityId }: AdminDashboardProps) {
                     {epoch.source_type && (
                         <div>
                             <dt className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
-                                Source
+                                Data Source
                             </dt>
-                            <dd className="capitalize">{epoch.source_type}</dd>
+                            <dd className="capitalize">{epoch.source_type.replace(/-/g, ' ')}</dd>
                         </div>
                     )}
                 </dl>

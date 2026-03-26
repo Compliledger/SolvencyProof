@@ -1,4 +1,4 @@
-import type { HealthStatus } from '@/types/solvency';
+import type { HealthStatus } from '@/lib/types';
 
 interface HealthStatusBadgeProps {
     status: HealthStatus;
