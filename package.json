@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "test:algorand:e2e": "cd backend/backend && npx tsx src/scripts/test-algorand-e2e.ts"
+  },
   "devDependencies": {
     "@types/supertest": "^7.2.0",
     "supertest": "^7.2.2"
