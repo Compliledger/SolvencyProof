@@ -26,6 +26,8 @@ import {
   writeAlgorandPayload,
 } from "../algorand/adapter_payload.js";
 import { toUniversalProofArtifact } from "../types/proof_artifact.js";
+import { loadPolicy } from "../complistate/policy_loader.js";
+import { buildRuleSnapshot } from "../complistate/rule_snapshot.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,6 +51,10 @@ async function main(): Promise<void> {
     reservesPath,
   });
 
+  // Load the active CompliPolicy and build a deterministic rule snapshot
+  const policy = loadPolicy();
+  const ruleSnapshot = buildRuleSnapshot(policy);
+
   const payload = toAlgorandSolventRegistryPayload(epoch);
 
   if (!existsSync(OUTPUT_DIR)) {
@@ -57,8 +63,8 @@ async function main(): Promise<void> {
 
   writeAlgorandPayload(payload, OUTPUT_DIR);
 
-  // Build and write the universal proof artifact
-  const proofArtifact = toUniversalProofArtifact(epoch);
+  // Build and write the universal proof artifact (with CompliState rule snapshot)
+  const proofArtifact = toUniversalProofArtifact(epoch, {}, ruleSnapshot);
   writeFileSync(
     path.join(OUTPUT_DIR, "proof_artifact.json"),
     JSON.stringify(proofArtifact, null, 2),
@@ -93,6 +99,9 @@ async function main(): Promise<void> {
   console.log(`  Reserve Root:               ${epoch.reserve_root}`);
   console.log(`  Reserve Snapshot Hash:      ${epoch.reserve_snapshot_hash}`);
   console.log(`  Proof Hash:                 ${epoch.proof_hash}`);
+  console.log("──────────────────────────────────────────────────");
+  console.log(`  Policy Lineage:             ${ruleSnapshot.policy_lineage}`);
+  console.log(`  Rule Snapshot Hash:         ${ruleSnapshot.rule_snapshot_hash}`);
   console.log("══════════════════════════════════════════════════\n");
   console.log(`✅ Payload written to: ${path.join(OUTPUT_DIR, "latest_epoch.json")}`);
   console.log(`✅ Full epoch written to: ${path.join(OUTPUT_DIR, "latest_epoch_full.json")}`);
