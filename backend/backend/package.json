@@ -25,6 +25,7 @@
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/ws": "^8.18.1",
+    "algosdk": "^3.5.2",
     "cors": "^2.8.6",
     "csv-parse": "^5.6.0",
     "dotenv": "^16.6.1",

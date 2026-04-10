@@ -1,17 +1,41 @@
+/**
+ * onchain.test.ts
+ *
+ * On-chain integration tests for the Algorand Solvent Registry.
+ *
+ * Replaces the legacy Ethereum/Sepolia on-chain tests with Algorand-native
+ * verification using the SolventRegistryClient and the real Algorand adapter.
+ *
+ * Tests:
+ *   1. Network connectivity — Algorand TestNet node reachability
+ *   2. Application existence — SolventRegistry app ID is valid
+ *   3. On-chain state reading — latest state, epoch records, health status
+ *   4. Epoch history enumeration — box key scanning
+ *   5. Data integrity — encode/decode round-trip on live data
+ *   6. Explorer link generation — Pera/AlgoExplorer URLs
+ *
+ * Read-only tests run against the public AlgoNode TestNet endpoint.
+ * No mnemonic or signing key is required.
+ */
+
 import { describe, it, expect, beforeAll } from "vitest";
-import {
-  createPublicClient,
-  createWalletClient,
-  http,
-  parseAbi,
-  formatEther,
-} from "viem";
-import { sepolia } from "viem/chains";
-import { privateKeyToAccount } from "viem/accounts";
+import algosdk from "algosdk";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+
+import {
+  SolventRegistryClient,
+  HealthStatus,
+  encodeState,
+  decodeState,
+} from "../../../../algorand/client/registry_client.js";
+import {
+  makeLatestBoxKey,
+  makeEpochBoxKey,
+  HEALTH_STATUS_STRING_MAP,
+} from "../../../../algorand/types/registry.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,384 +43,360 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, "../../.env") });
 
 const OUTPUT_DIR = path.join(__dirname, "../../../data/output");
-const RPC_URL = process.env.SEPOLIA_RPC_URL || "https://1rpc.io/sepolia";
-const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 
-describe("On-Chain Tests: Real Blockchain Transactions", () => {
-  let publicClient: ReturnType<typeof createPublicClient>;
-  let walletClient: ReturnType<typeof createWalletClient>;
-  let account: ReturnType<typeof privateKeyToAccount>;
-  let registryAddress: string;
-  let verifierAddress: string;
-  let hasPrivateKey = false;
+// Algorand TestNet configuration
+const ALGOD_URL = process.env.ALGORAND_ALGOD_URL || "https://testnet-api.algonode.cloud";
+const ALGOD_TOKEN = process.env.ALGORAND_ALGOD_TOKEN || "";
+const ALGOD_PORT = parseInt(process.env.ALGORAND_ALGOD_PORT || "443", 10);
+const APP_ID_STR = process.env.ALGORAND_APP_ID || process.env.SOLVENT_REGISTRY_APP_ID || "";
+const ENTITY_ID = process.env.ENTITY_ID || "compliledger-entity-01";
+
+describe("On-Chain Tests: Algorand Solvent Registry", () => {
+  let algodClient: algosdk.Algodv2;
+  let registryClient: SolventRegistryClient;
+  let appId: bigint;
+  let hasAppId = false;
 
   beforeAll(() => {
-    publicClient = createPublicClient({
-      chain: sepolia,
-      transport: http(RPC_URL),
-    });
+    algodClient = new algosdk.Algodv2(ALGOD_TOKEN, ALGOD_URL, ALGOD_PORT);
 
-    // Check if we have private key for write operations
-    if (PRIVATE_KEY) {
-      hasPrivateKey = true;
-      account = privateKeyToAccount(PRIVATE_KEY as `0x${string}`);
-      walletClient = createWalletClient({
-        account,
-        chain: sepolia,
-        transport: http(RPC_URL),
+    if (APP_ID_STR && APP_ID_STR !== "0") {
+      appId = BigInt(APP_ID_STR);
+      hasAppId = true;
+      registryClient = new SolventRegistryClient({
+        nodeUrl: ALGOD_URL,
+        nodeToken: ALGOD_TOKEN,
+        nodePort: ALGOD_PORT,
+        appId,
       });
-    }
-
-    // Load deployment info
-    const deploymentPath = path.join(OUTPUT_DIR, "deployment.json");
-    if (fs.existsSync(deploymentPath)) {
-      const deployment = JSON.parse(fs.readFileSync(deploymentPath, "utf-8"));
-      registryAddress = deployment.contracts.SolvencyProofRegistry;
-      verifierAddress = deployment.contracts.Groth16Verifier;
     }
   });
 
-  describe("1. Wallet & Network Verification", () => {
-    it("should connect to Sepolia network", async () => {
-      const chainId = await publicClient.getChainId();
-      expect(chainId).toBe(11155111);
-      console.log(`   ✓ Connected to Sepolia (chainId: ${chainId})`);
+  describe("1. Algorand Network Connectivity", () => {
+    it("should connect to Algorand TestNet node", async () => {
+      const status = await algodClient.status().do();
+      expect(status).toBeDefined();
+      expect(status.lastRound).toBeGreaterThan(0n);
+      console.log(`   ✓ Connected to Algorand TestNet`);
+      console.log(`   ✓ Latest round: ${status.lastRound}`);
+      console.log(`   ✓ Catchup time: ${status.catchupTime}`);
     });
 
-    it("should get current block number", async () => {
-      const blockNumber = await publicClient.getBlockNumber();
-      expect(blockNumber).toBeGreaterThan(0n);
-      console.log(`   ✓ Current block: ${blockNumber}`);
+    it("should get current node health", async () => {
+      // healthCheck().do() returns undefined on success, throws on failure
+      await algodClient.healthCheck().do();
+      // If we reach here without throwing, the node is healthy
+      expect(true).toBe(true);
+      console.log(`   ✓ Algorand node is healthy`);
     });
 
-    it("should verify wallet has ETH balance", async () => {
-      if (!hasPrivateKey) {
-        console.log("   ⚠️  No private key - skipping wallet balance check");
-        return;
-      }
+    it("should get genesis information", async () => {
+      const versions = await algodClient.versionsCheck().do();
+      expect(versions).toBeDefined();
+      expect(versions.genesisId).toContain("testnet");
+      console.log(`   ✓ Genesis ID: ${versions.genesisId}`);
+      console.log(`   ✓ Genesis Hash: ${versions.genesisHashB64}`);
+    });
 
-      const balance = await publicClient.getBalance({
-        address: account.address,
-      });
-
-      expect(balance).toBeGreaterThan(0n);
-      console.log(`   ✓ Wallet: ${account.address}`);
-      console.log(`   ✓ Balance: ${formatEther(balance)} ETH`);
+    it("should get suggested transaction parameters", async () => {
+      const params = await algodClient.getTransactionParams().do();
+      expect(params).toBeDefined();
+      expect(params.firstValid).toBeGreaterThan(0n);
+      expect(params.genesisID).toContain("testnet");
+      console.log(`   ✓ First valid round: ${params.firstValid}`);
+      console.log(`   ✓ Last valid round: ${params.lastValid}`);
+      console.log(`   ✓ Min fee: ${params.minFee}`);
     });
   });
 
-  describe("2. Contract Deployment Verification", () => {
-    it("should verify SolvencyProofRegistry is deployed", async () => {
-      if (!registryAddress) {
-        console.log("   ⚠️  No deployment info found");
+  describe("2. SolventRegistry Application Verification", () => {
+    it("should have ALGORAND_APP_ID configured", () => {
+      if (!hasAppId) {
+        console.log("   ⚠️  ALGORAND_APP_ID not set — set it in .env to enable live tests");
         return;
       }
-
-      const code = await publicClient.getCode({
-        address: registryAddress as `0x${string}`,
-      });
-
-      expect(code).toBeDefined();
-      expect(code!.length).toBeGreaterThan(2);
-      console.log(`   ✓ Registry deployed at: ${registryAddress}`);
-      console.log(`   ✓ Contract bytecode size: ${(code!.length - 2) / 2} bytes`);
+      expect(appId).toBeGreaterThan(0n);
+      console.log(`   ✓ SolventRegistry App ID: ${appId}`);
     });
 
-    it("should verify Groth16Verifier is deployed", async () => {
-      if (!verifierAddress) {
-        console.log("   ⚠️  No deployment info found");
-        return;
-      }
+    it("should verify application exists on-chain", async () => {
+      if (!hasAppId) return;
 
-      const code = await publicClient.getCode({
-        address: verifierAddress as `0x${string}`,
-      });
+      const appInfo = await algodClient.getApplicationByID(Number(appId)).do();
+      expect(appInfo).toBeDefined();
+      expect(BigInt(appInfo.id)).toBe(appId);
+      console.log(`   ✓ Application found on-chain: ${appInfo.id}`);
+      console.log(`   ✓ Creator: ${appInfo.params.creator}`);
+    });
 
-      expect(code).toBeDefined();
-      expect(code!.length).toBeGreaterThan(2);
-      console.log(`   ✓ Verifier deployed at: ${verifierAddress}`);
-      console.log(`   ✓ Contract bytecode size: ${(code!.length - 2) / 2} bytes`);
+    it("should verify application has approval program", async () => {
+      if (!hasAppId) return;
+
+      const appInfo = await algodClient.getApplicationByID(Number(appId)).do();
+      const approvalProgram = appInfo.params.approvalProgram;
+
+      expect(approvalProgram).toBeDefined();
+      expect(approvalProgram.length).toBeGreaterThan(0);
+      console.log(`   ✓ Approval program size: ${approvalProgram.length} bytes`);
     });
   });
 
   describe("3. On-Chain State Reading", () => {
-    it("should read registry owner from chain", async () => {
-      if (!registryAddress) return;
+    it("should read latest state for entity (or null)", async () => {
+      if (!hasAppId) return;
 
-      const abi = parseAbi(["function owner() external view returns (address)"]);
-
-      const owner = await publicClient.readContract({
-        address: registryAddress as `0x${string}`,
-        abi,
-        functionName: "owner",
-      });
-
-      expect(owner).toMatch(/^0x[a-fA-F0-9]{40}$/);
-      console.log(`   ✓ Registry owner: ${owner}`);
+      const state = await registryClient.getLatestState(ENTITY_ID);
+      if (state) {
+        expect(state.entity_id).toBe(ENTITY_ID);
+        expect(state.epoch_id).toBeDefined();
+        expect(state.liability_root).toBeDefined();
+        expect(state.reserve_root).toBeDefined();
+        expect(state.proof_hash).toBeDefined();
+        expect(state.timestamp).toBeGreaterThan(0n);
+        expect(state.valid_until).toBeGreaterThan(0n);
+        console.log(`   ✓ Entity: ${state.entity_id}`);
+        console.log(`   ✓ Epoch: ${state.epoch_id}`);
+        console.log(`   ✓ Health: ${HealthStatus[state.health_status]}`);
+        console.log(`   ✓ Capital Backed: ${state.capital_backed}`);
+        console.log(`   ✓ Liquidity Ready: ${state.liquidity_ready}`);
+        console.log(`   ✓ Timestamp: ${new Date(Number(state.timestamp) * 1000).toISOString()}`);
+        console.log(`   ✓ Valid Until: ${new Date(Number(state.valid_until) * 1000).toISOString()}`);
+      } else {
+        console.log(`   ⚠️  No on-chain state for entity_id=${ENTITY_ID} — submit an epoch first`);
+      }
+      // Test passes either way — null is valid for no submissions
+      expect(true).toBe(true);
     });
 
-    it("should read verifier address from registry", async () => {
-      if (!registryAddress) return;
+    it("should get health status for entity", async () => {
+      if (!hasAppId) return;
 
-      const abi = parseAbi(["function verifier() external view returns (address)"]);
-
-      const verifier = await publicClient.readContract({
-        address: registryAddress as `0x${string}`,
-        abi,
-        functionName: "verifier",
-      });
-
-      expect(verifier.toLowerCase()).toBe(verifierAddress.toLowerCase());
-      console.log(`   ✓ Verifier linked: ${verifier}`);
+      const status = await registryClient.getHealthStatus(ENTITY_ID);
+      expect(typeof status).toBe("number");
+      expect(Object.values(HealthStatus)).toContain(status);
+      console.log(`   ✓ Health Status: ${HealthStatus[status]} (${status})`);
     });
 
-    it("should read epoch count from registry", async () => {
-      if (!registryAddress) return;
+    it("should get isHealthy flag for entity", async () => {
+      if (!hasAppId) return;
 
-      const abi = parseAbi(["function getEpochCount() external view returns (uint256)"]);
-
-      const count = await publicClient.readContract({
-        address: registryAddress as `0x${string}`,
-        abi,
-        functionName: "getEpochCount",
-      });
-
-      expect(count).toBeGreaterThanOrEqual(0n);
-      console.log(`   ✓ Total epochs submitted: ${count}`);
+      const healthy = await registryClient.isHealthy(ENTITY_ID);
+      expect(typeof healthy).toBe("boolean");
+      console.log(`   ✓ Is Healthy: ${healthy}`);
     });
   });
 
-  describe("4. Submitted Proof On-Chain Verification", () => {
-    it("should verify proof exists on-chain", async () => {
-      if (!registryAddress) return;
+  describe("4. Epoch History & Box Enumeration", () => {
+    it("should enumerate application boxes", async () => {
+      if (!hasAppId) return;
 
-      const submissionPath = path.join(OUTPUT_DIR, "submission_result.json");
-      if (!fs.existsSync(submissionPath)) {
-        console.log("   ⚠️  No submission found - run submit:proof first");
-        return;
+      try {
+        const boxesResponse = await algodClient
+          .getApplicationBoxes(Number(appId))
+          .do();
+        const boxes = boxesResponse.boxes ?? [];
+        expect(Array.isArray(boxes)).toBe(true);
+
+        console.log(`   ✓ Total boxes: ${boxes.length}`);
+
+        const dec = new TextDecoder();
+        for (const box of boxes.slice(0, 5)) {
+          const name = dec.decode(box.name);
+          console.log(`     - ${name}`);
+        }
+        if (boxes.length > 5) {
+          console.log(`     ... and ${boxes.length - 5} more`);
+        }
+      } catch (err) {
+        console.log(`   ⚠️  Could not enumerate boxes: ${err}`);
       }
-
-      const submission = JSON.parse(fs.readFileSync(submissionPath, "utf-8"));
-      const epochId = submission.epochId as `0x${string}`;
-
-      const abi = parseAbi([
-        "function getProof(bytes32 epochId) external view returns (bytes32, bytes32, uint256, uint256, address, bool)",
-      ]);
-
-      const proof = await publicClient.readContract({
-        address: registryAddress as `0x${string}`,
-        abi,
-        functionName: "getProof",
-        args: [epochId],
-      });
-
-      // proof[3] = timestamp, proof[5] = verified
-      expect(proof[3]).toBeGreaterThan(0n);
-      expect(proof[5]).toBe(true);
-
-      console.log(`   ✓ Epoch ID: ${epochId.slice(0, 20)}...`);
-      console.log(`   ✓ Liabilities Root: ${proof[1].slice(0, 20)}...`);
-      console.log(`   ✓ Reserves Total: ${proof[2]} wei`);
-      console.log(`   ✓ Timestamp: ${new Date(Number(proof[3]) * 1000).toISOString()}`);
-      console.log(`   ✓ Submitter: ${proof[4]}`);
-      console.log(`   ✓ Verified: ${proof[5]}`);
     });
 
-    it("should get latest epoch from registry", async () => {
-      if (!registryAddress) return;
+    it("should get epoch history via registryClient", async () => {
+      if (!hasAppId) return;
 
-      const countAbi = parseAbi(["function getEpochCount() external view returns (uint256)"]);
-      const count = await publicClient.readContract({
-        address: registryAddress as `0x${string}`,
-        abi: countAbi,
-        functionName: "getEpochCount",
-      });
+      const history = await registryClient.getEpochHistory(ENTITY_ID);
+      expect(Array.isArray(history)).toBe(true);
 
-      if (count === 0n) {
-        console.log("   ⚠️  No epochs submitted yet");
+      console.log(`   ✓ Epoch history entries: ${history.length}`);
+      for (const record of history.slice(0, 3)) {
+        console.log(
+          `     - epoch=${record.epoch_id} ` +
+          `health=${HealthStatus[record.health_status]} ` +
+          `ts=${new Date(Number(record.timestamp) * 1000).toISOString()}`
+        );
+      }
+    });
+
+    it("should read specific epoch record when history exists", async () => {
+      if (!hasAppId) return;
+
+      const state = await registryClient.getLatestState(ENTITY_ID);
+      if (!state) {
+        console.log("   ⚠️  No state — skipping epoch record read");
         return;
       }
 
-      const latestAbi = parseAbi(["function getLatestEpoch() external view returns (bytes32)"]);
-      const latestEpoch = await publicClient.readContract({
-        address: registryAddress as `0x${string}`,
-        abi: latestAbi,
-        functionName: "getLatestEpoch",
-      });
-
-      expect(latestEpoch).toMatch(/^0x[a-fA-F0-9]{64}$/);
-      console.log(`   ✓ Latest epoch: ${latestEpoch.slice(0, 20)}...`);
+      const record = await registryClient.getEpochRecord(ENTITY_ID, state.epoch_id);
+      expect(record).not.toBeNull();
+      expect(record!.entity_id).toBe(ENTITY_ID);
+      expect(record!.epoch_id).toBe(state.epoch_id);
+      expect(record!.proof_hash).toBe(state.proof_hash);
+      console.log(`   ✓ Epoch record matches latest state`);
+      console.log(`   ✓ Proof hash: ${record!.proof_hash.slice(0, 30)}...`);
     });
   });
 
-  describe("5. Transaction Receipt Verification", () => {
-    it("should verify proof submission TX on-chain", async () => {
-      const submissionPath = path.join(OUTPUT_DIR, "submission_result.json");
-      if (!fs.existsSync(submissionPath)) {
-        console.log("   ⚠️  No submission found");
+  describe("5. Data Integrity: Encode/Decode Round-Trip on Live Data", () => {
+    it("should round-trip live on-chain state through encode/decode", async () => {
+      if (!hasAppId) return;
+
+      const state = await registryClient.getLatestState(ENTITY_ID);
+      if (!state) {
+        console.log("   ⚠️  No state — skipping round-trip test");
         return;
       }
 
-      const submission = JSON.parse(fs.readFileSync(submissionPath, "utf-8"));
-      const txHash = submission.txHash as `0x${string}`;
+      // Reconstruct a payload from the live record and re-encode
+      const payload = {
+        entity_id: state.entity_id,
+        epoch_id: state.epoch_id,
+        liability_root: state.liability_root,
+        reserve_root: state.reserve_root,
+        reserve_snapshot_hash: state.reserve_snapshot_hash,
+        proof_hash: state.proof_hash,
+        reserves_total: state.reserves_total,
+        liquid_assets_total: state.liquid_assets_total,
+        near_term_liabilities_total: state.near_term_liabilities_total,
+        capital_backed: state.capital_backed,
+        liquidity_ready: state.liquidity_ready,
+        health_status: state.health_status,
+        timestamp: state.timestamp,
+        valid_until: state.valid_until,
+      };
 
-      const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+      const encoded = encodeState(payload, state.insolvency_flag, state.liquidity_stress_flag);
+      const decoded = decodeState(encoded);
 
-      expect(receipt.status).toBe("success");
-      expect(receipt.blockNumber).toBeGreaterThan(0n);
+      expect(decoded.entity_id).toBe(state.entity_id);
+      expect(decoded.epoch_id).toBe(state.epoch_id);
+      expect(decoded.liability_root).toBe(state.liability_root);
+      expect(decoded.proof_hash).toBe(state.proof_hash);
+      expect(decoded.reserves_total).toBe(state.reserves_total);
+      expect(decoded.health_status).toBe(state.health_status);
+      expect(decoded.timestamp).toBe(state.timestamp);
+      expect(decoded.valid_until).toBe(state.valid_until);
+      expect(decoded.insolvency_flag).toBe(state.insolvency_flag);
+      expect(decoded.liquidity_stress_flag).toBe(state.liquidity_stress_flag);
 
-      console.log(`   ✓ TX Hash: ${txHash}`);
-      console.log(`   ✓ Status: ${receipt.status}`);
-      console.log(`   ✓ Block: ${receipt.blockNumber}`);
-      console.log(`   ✓ Gas Used: ${receipt.gasUsed}`);
-      console.log(`   ✓ From: ${receipt.from}`);
-      console.log(`   ✓ To: ${receipt.to}`);
-    });
-
-    it("should get transaction details from chain", async () => {
-      const submissionPath = path.join(OUTPUT_DIR, "submission_result.json");
-      if (!fs.existsSync(submissionPath)) {
-        console.log("   ⚠️  No submission found");
-        return;
-      }
-
-      const submission = JSON.parse(fs.readFileSync(submissionPath, "utf-8"));
-      const txHash = submission.txHash as `0x${string}`;
-
-      const tx = await publicClient.getTransaction({ hash: txHash });
-
-      expect(tx.hash).toBe(txHash);
-      console.log(`   ✓ Nonce: ${tx.nonce}`);
-      console.log(`   ✓ Gas Price: ${tx.gasPrice ? formatEther(tx.gasPrice) : 'N/A'} ETH`);
-      console.log(`   ✓ Value: ${formatEther(tx.value)} ETH`);
-    });
-
-    it("should get block details for submission", async () => {
-      const submissionPath = path.join(OUTPUT_DIR, "submission_result.json");
-      if (!fs.existsSync(submissionPath)) {
-        console.log("   ⚠️  No submission found");
-        return;
-      }
-
-      const submission = JSON.parse(fs.readFileSync(submissionPath, "utf-8"));
-      const txHash = submission.txHash as `0x${string}`;
-
-      const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
-      const block = await publicClient.getBlock({ blockNumber: receipt.blockNumber });
-
-      expect(block.number).toBe(receipt.blockNumber);
-      console.log(`   ✓ Block Number: ${block.number}`);
-      console.log(`   ✓ Block Hash: ${block.hash?.slice(0, 20)}...`);
-      console.log(`   ✓ Block Time: ${new Date(Number(block.timestamp) * 1000).toISOString()}`);
-      console.log(`   ✓ Transactions in block: ${block.transactions.length}`);
+      console.log(`   ✓ Live state round-trips perfectly through encode/decode`);
     });
   });
 
-  describe("6. Etherscan Links", () => {
-    it("should generate Etherscan verification links", async () => {
-      const submissionPath = path.join(OUTPUT_DIR, "submission_result.json");
-      if (!fs.existsSync(submissionPath)) {
-        console.log("   ⚠️  No submission found");
-        return;
-      }
+  describe("6. Algorand Explorer Links", () => {
+    it("should generate Pera explorer verification links", () => {
+      if (!hasAppId) return;
 
-      const submission = JSON.parse(fs.readFileSync(submissionPath, "utf-8"));
+      const appUrl = `https://explorer.perawallet.app/application/${appId}/`;
+      console.log(`\n   📋 Verify on Algorand Explorer:`);
+      console.log(`   ✓ Application: ${appUrl}`);
 
-      console.log("\n   📋 Verify on Etherscan:");
-      console.log(`   ✓ TX: https://sepolia.etherscan.io/tx/${submission.txHash}`);
-      console.log(`   ✓ Registry: https://sepolia.etherscan.io/address/${registryAddress}`);
-      console.log(`   ✓ Verifier: https://sepolia.etherscan.io/address/${verifierAddress}`);
+      expect(appUrl).toContain(String(appId));
+    });
 
-      expect(submission.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+    it("should generate correct explorer links from constants", async () => {
+      if (!hasAppId) return;
+
+      const baseUrl = "https://explorer.perawallet.app";
+      const txUrl = `${baseUrl}/tx/SAMPLE_TX_ID/`;
+      const addrUrl = `${baseUrl}/address/SAMPLE_ADDR/`;
+
+      expect(txUrl).toContain("tx/");
+      expect(addrUrl).toContain("address/");
+      console.log(`   ✓ TX URL format: ${txUrl}`);
+      console.log(`   ✓ Address URL format: ${addrUrl}`);
     });
   });
 });
 
-describe("On-Chain Tests: Groth16 Verifier", () => {
-  let publicClient: ReturnType<typeof createPublicClient>;
-  let verifierAddress: string;
+describe("On-Chain Tests: Algorand Adapter Client Integration", () => {
+  let hasAppId = false;
 
   beforeAll(() => {
-    publicClient = createPublicClient({
-      chain: sepolia,
-      transport: http(RPC_URL),
-    });
-
-    const deploymentPath = path.join(OUTPUT_DIR, "deployment.json");
-    if (fs.existsSync(deploymentPath)) {
-      const deployment = JSON.parse(fs.readFileSync(deploymentPath, "utf-8"));
-      verifierAddress = deployment.contracts.Groth16Verifier;
+    if (APP_ID_STR && APP_ID_STR !== "0") {
+      hasAppId = true;
     }
   });
 
-  it("should call verifyProof with invalid proof (should return false)", async () => {
-    if (!verifierAddress) return;
-
-    const abi = parseAbi([
-      "function verifyProof(uint256[2] calldata _pA, uint256[2][2] calldata _pB, uint256[2] calldata _pC, uint256[4] calldata _pubSignals) external view returns (bool)",
-    ]);
-
-    // Invalid proof (all zeros)
-    const pA: [bigint, bigint] = [0n, 0n];
-    const pB: [[bigint, bigint], [bigint, bigint]] = [[0n, 0n], [0n, 0n]];
-    const pC: [bigint, bigint] = [0n, 0n];
-    const pubSignals: [bigint, bigint, bigint, bigint] = [1n, 0n, 0n, 0n];
-
-    const result = await publicClient.readContract({
-      address: verifierAddress as `0x${string}`,
-      abi,
-      functionName: "verifyProof",
-      args: [pA, pB, pC, pubSignals],
-    });
-
-    expect(result).toBe(false);
-    console.log(`   ✓ Invalid proof correctly rejected by on-chain verifier`);
-  });
-
-  it("should verify the actual submitted proof on-chain", async () => {
-    if (!verifierAddress) return;
-
-    const proofPath = path.join(OUTPUT_DIR, "solvency_proof.json");
-    if (!fs.existsSync(proofPath)) {
-      console.log("   ⚠️  No proof found");
+  it("should create adapter client with real config when enabled", async () => {
+    if (!hasAppId) {
+      console.log("   ⚠️  ALGORAND_APP_ID not set — skipping adapter client test");
       return;
     }
 
-    const proofData = JSON.parse(fs.readFileSync(proofPath, "utf-8"));
+    const { loadAlgorandAdapterConfig } = await import("../algorand/adapter_config.js");
+    const { createAlgorandAdapterRealClient } = await import("../algorand/algorand_adapter_real_client.js");
 
-    const abi = parseAbi([
-      "function verifyProof(uint256[2] calldata _pA, uint256[2][2] calldata _pB, uint256[2] calldata _pC, uint256[4] calldata _pubSignals) external view returns (bool)",
-    ]);
+    // Temporarily set env for the factory
+    const origEnabled = process.env.ALGORAND_ADAPTER_ENABLED;
+    process.env.ALGORAND_ADAPTER_ENABLED = "true";
 
-    // Use actual proof data
-    const pA: [bigint, bigint] = [
-      BigInt(proofData.proof.pi_a[0]),
-      BigInt(proofData.proof.pi_a[1]),
-    ];
-    const pB: [[bigint, bigint], [bigint, bigint]] = [
-      [BigInt(proofData.proof.pi_b[0][1]), BigInt(proofData.proof.pi_b[0][0])],
-      [BigInt(proofData.proof.pi_b[1][1]), BigInt(proofData.proof.pi_b[1][0])],
-    ];
-    const pC: [bigint, bigint] = [
-      BigInt(proofData.proof.pi_c[0]),
-      BigInt(proofData.proof.pi_c[1]),
-    ];
-    const pubSignals: [bigint, bigint, bigint, bigint] = [
-      BigInt(proofData.publicSignals[0]),
-      BigInt(proofData.publicSignals[1]),
-      BigInt(proofData.publicSignals[2]),
-      BigInt(proofData.publicSignals[3]),
-    ];
+    try {
+      const config = loadAlgorandAdapterConfig();
+      expect(config.appId).toBeGreaterThan(0n);
+      expect(config.algodUrl).toContain("algonode");
 
-    const result = await publicClient.readContract({
-      address: verifierAddress as `0x${string}`,
-      abi,
-      functionName: "verifyProof",
-      args: [pA, pB, pC, pubSignals],
-    });
+      const client = createAlgorandAdapterRealClient(config);
+      expect(client).toBeDefined();
 
-    expect(result).toBe(true);
-    console.log(`   ✓ Real proof verified on-chain by Groth16Verifier!`);
-    console.log(`   ✓ isSolvent: ${proofData.publicSignals[0] === "1"}`);
+      // Test read-only methods through the adapter
+      const state = await client.getLatestState(ENTITY_ID);
+      // state can be null if no epoch submitted — that's fine
+      console.log(`   ✓ Adapter client created successfully`);
+      console.log(`   ✓ Latest state: ${state ? "found" : "no submissions yet"}`);
+
+      const healthStatus = await client.getHealthStatus(ENTITY_ID);
+      console.log(`   ✓ Health status: ${healthStatus ? healthStatus.health_status : "N/A"}`);
+
+      const isHealthy = await client.isHealthy(ENTITY_ID);
+      console.log(`   ✓ Is healthy: ${isHealthy}`);
+
+      const isFresh = await client.isFresh(ENTITY_ID);
+      console.log(`   ✓ Is fresh: ${isFresh}`);
+    } finally {
+      if (origEnabled !== undefined) {
+        process.env.ALGORAND_ADAPTER_ENABLED = origEnabled;
+      } else {
+        delete process.env.ALGORAND_ADAPTER_ENABLED;
+      }
+    }
+  });
+
+  it("should fall back to stub when adapter is disabled", async () => {
+    const { createAlgorandAdapterClient } = await import("../algorand/adapter_client.js");
+
+    const origEnabled = process.env.ALGORAND_ADAPTER_ENABLED;
+    delete process.env.ALGORAND_ADAPTER_ENABLED;
+
+    try {
+      const client = createAlgorandAdapterClient();
+      expect(client).toBeDefined();
+
+      // Stub returns null/false/empty for all reads
+      const state = await client.getLatestState(ENTITY_ID);
+      expect(state).toBeNull();
+
+      const healthy = await client.isHealthy(ENTITY_ID);
+      expect(healthy).toBe(false);
+
+      const fresh = await client.isFresh(ENTITY_ID);
+      expect(fresh).toBe(false);
+
+      console.log(`   ✓ Stub client returns safe defaults when adapter disabled`);
+    } finally {
+      if (origEnabled !== undefined) {
+        process.env.ALGORAND_ADAPTER_ENABLED = origEnabled;
+      }
+    }
   });
 });

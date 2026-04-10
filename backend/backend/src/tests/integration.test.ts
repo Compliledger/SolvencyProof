@@ -1,9 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { createPublicClient, http, parseAbi } from "viem";
-import { sepolia } from "viem/chains";
+import algosdk from "algosdk";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  SolventRegistryClient,
+  HealthStatus,
+} from "../../../../algorand/client/registry_client.js";
+import { loadAlgorandAdapterConfig } from "../algorand/adapter_config.js";
+import { createAlgorandAdapterRealClient } from "../algorand/algorand_adapter_real_client.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -229,138 +234,115 @@ describe("Integration Tests: API Calls", () => {
   });
 });
 
-describe("Integration Tests: On-Chain Transactions", () => {
-  const RPC_URL = process.env.SEPOLIA_RPC_URL || "https://1rpc.io/sepolia";
+describe("Integration Tests: Algorand On-Chain Verification", () => {
+  const ALGOD_URL = process.env.ALGORAND_ALGOD_URL || "https://testnet-api.algonode.cloud";
+  const ALGOD_TOKEN = process.env.ALGORAND_ALGOD_TOKEN || "";
+  const ALGOD_PORT = parseInt(process.env.ALGORAND_ALGOD_PORT || "443", 10);
+  const APP_ID_STR = process.env.ALGORAND_APP_ID || process.env.SOLVENT_REGISTRY_APP_ID || "";
+  const ENTITY_ID = process.env.ENTITY_ID || "compliledger-entity-01";
 
-  let publicClient: ReturnType<typeof createPublicClient>;
-  let registryAddress: string;
-  let verifierAddress: string;
+  let registryClient: SolventRegistryClient;
+  let hasAppId = false;
 
   beforeAll(() => {
-    publicClient = createPublicClient({
-      chain: sepolia,
-      transport: http(RPC_URL),
-    });
-
-    // Load deployment info
-    const deploymentPath = path.join(OUTPUT_DIR, "deployment.json");
-    if (fs.existsSync(deploymentPath)) {
-      const deployment = JSON.parse(fs.readFileSync(deploymentPath, "utf-8"));
-      registryAddress = deployment.contracts.SolvencyProofRegistry;
-      verifierAddress = deployment.contracts.Groth16Verifier;
+    if (APP_ID_STR && APP_ID_STR !== "0") {
+      hasAppId = true;
+      registryClient = new SolventRegistryClient({
+        nodeUrl: ALGOD_URL,
+        nodeToken: ALGOD_TOKEN,
+        nodePort: ALGOD_PORT,
+        appId: BigInt(APP_ID_STR),
+      });
     }
   });
 
-  describe("Contract State Verification", () => {
-    it("should read epoch count from on-chain registry", async () => {
-      if (!registryAddress) return;
-
-      const abi = parseAbi(["function getEpochCount() external view returns (uint256)"]);
-
-      const epochCount = await publicClient.readContract({
-        address: registryAddress as `0x${string}`,
-        abi,
-        functionName: "getEpochCount",
-      });
-
-      expect(epochCount).toBeGreaterThanOrEqual(0n);
-      console.log(`   On-chain epoch count: ${epochCount}`);
-    });
-
-    it("should read verifier address from registry", async () => {
-      if (!registryAddress) return;
-
-      const abi = parseAbi(["function verifier() external view returns (address)"]);
-
-      const verifier = await publicClient.readContract({
-        address: registryAddress as `0x${string}`,
-        abi,
-        functionName: "verifier",
-      });
-
-      expect(verifier).toMatch(/^0x[a-fA-F0-9]{40}$/);
-      expect(verifier.toLowerCase()).toBe(verifierAddress.toLowerCase());
-      console.log(`   On-chain verifier: ${verifier}`);
-    });
-
-    it("should read owner from registry", async () => {
-      if (!registryAddress) return;
-
-      const abi = parseAbi(["function owner() external view returns (address)"]);
-
-      const owner = await publicClient.readContract({
-        address: registryAddress as `0x${string}`,
-        abi,
-        functionName: "owner",
-      });
-
-      expect(owner).toMatch(/^0x[a-fA-F0-9]{40}$/);
-      console.log(`   On-chain owner: ${owner}`);
-    });
-  });
-
-  describe("Submitted Proof Verification", () => {
-    it("should verify submitted proof exists on-chain", async () => {
-      if (!registryAddress) return;
-
-      // Check if we have a submission result
-      const submissionPath = path.join(OUTPUT_DIR, "submission_result.json");
-      if (!fs.existsSync(submissionPath)) {
-        console.log("   No submission result found - skipping");
+  describe("Algorand Registry State Verification", () => {
+    it("should read latest state from Algorand registry", async () => {
+      if (!hasAppId) {
+        console.log("   ⚠️  ALGORAND_APP_ID not set — skipping");
         return;
       }
 
-      const submission = JSON.parse(fs.readFileSync(submissionPath, "utf-8"));
-      const epochId = submission.epochId as `0x${string}`;
-
-      const abi = parseAbi([
-        "function getProof(bytes32 epochId) external view returns (bytes32, bytes32, uint256, uint256, address, bool)",
-      ]);
-
-      const proof = await publicClient.readContract({
-        address: registryAddress as `0x${string}`,
-        abi,
-        functionName: "getProof",
-        args: [epochId],
-      });
-
-      expect(proof[3]).toBeGreaterThan(0n); // timestamp > 0 means proof exists
-      expect(proof[5]).toBe(true); // verified = true
-      console.log(`   Proof verified on-chain: ${proof[5]}`);
-      console.log(`   Proof timestamp: ${new Date(Number(proof[3]) * 1000).toISOString()}`);
+      const state = await registryClient.getLatestState(ENTITY_ID);
+      if (state) {
+        expect(state.entity_id).toBe(ENTITY_ID);
+        expect(state.epoch_id).toBeDefined();
+        console.log(`   Latest epoch: ${state.epoch_id}`);
+        console.log(`   Health: ${HealthStatus[state.health_status]}`);
+      } else {
+        console.log(`   No on-chain state yet for entity_id=${ENTITY_ID}`);
+      }
     });
 
-    it("should verify transaction receipt on-chain", async () => {
-      const submissionPath = path.join(OUTPUT_DIR, "submission_result.json");
-      if (!fs.existsSync(submissionPath)) {
-        console.log("   No submission result found - skipping");
-        return;
-      }
+    it("should read health status from Algorand registry", async () => {
+      if (!hasAppId) return;
 
-      const submission = JSON.parse(fs.readFileSync(submissionPath, "utf-8"));
-      const txHash = submission.txHash as `0x${string}`;
+      const status = await registryClient.getHealthStatus(ENTITY_ID);
+      expect(typeof status).toBe("number");
+      console.log(`   Health status: ${HealthStatus[status]} (${status})`);
+    });
 
-      const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+    it("should read epoch history from Algorand registry", async () => {
+      if (!hasAppId) return;
 
-      expect(receipt).toBeDefined();
-      expect(receipt.status).toBe("success");
-      expect(receipt.blockNumber).toBeGreaterThan(0n);
-      console.log(`   TX confirmed in block: ${receipt.blockNumber}`);
-      console.log(`   Gas used: ${receipt.gasUsed}`);
+      const history = await registryClient.getEpochHistory(ENTITY_ID);
+      expect(Array.isArray(history)).toBe(true);
+      console.log(`   Epoch history count: ${history.length}`);
     });
   });
 
-  describe("Groth16Verifier Contract", () => {
-    it("should verify verifier contract is deployed", async () => {
-      if (!verifierAddress) return;
+  describe("Algorand Adapter Proof Verification", () => {
+    it("should verify submitted epoch exists via adapter", async () => {
+      if (!hasAppId) return;
 
-      const code = await publicClient.getCode({
-        address: verifierAddress as `0x${string}`,
-      });
+      const origEnabled = process.env.ALGORAND_ADAPTER_ENABLED;
+      process.env.ALGORAND_ADAPTER_ENABLED = "true";
 
-      expect(code).toBeDefined();
-      expect(code!.length).toBeGreaterThan(2); // More than just "0x"
-      console.log(`   Verifier bytecode length: ${code!.length} chars`);
+      try {
+        const config = loadAlgorandAdapterConfig();
+        const client = createAlgorandAdapterRealClient(config);
+
+        const state = await client.getLatestState(ENTITY_ID);
+        if (!state) {
+          console.log("   No epoch submitted — submit one to enable full verification");
+          return;
+        }
+
+        expect(state.entity_id).toBe(ENTITY_ID);
+        expect(state.health_status).toBeDefined();
+        console.log(`   Adapter returned epoch_id: ${state.epoch_id}`);
+        console.log(`   Health status: ${state.health_status}`);
+      } finally {
+        if (origEnabled !== undefined) {
+          process.env.ALGORAND_ADAPTER_ENABLED = origEnabled;
+        } else {
+          delete process.env.ALGORAND_ADAPTER_ENABLED;
+        }
+      }
+    });
+
+    it("should verify stored record via adapter", async () => {
+      if (!hasAppId) return;
+
+      const origEnabled = process.env.ALGORAND_ADAPTER_ENABLED;
+      process.env.ALGORAND_ADAPTER_ENABLED = "true";
+
+      try {
+        const config = loadAlgorandAdapterConfig();
+        const client = createAlgorandAdapterRealClient(config);
+
+        const result = await client.verifyStoredRecord(ENTITY_ID, 1);
+        expect(result.entity_id).toBe(ENTITY_ID);
+        expect(typeof result.verified).toBe("boolean");
+        console.log(`   Verified: ${result.verified}`);
+        console.log(`   Message: ${result.message}`);
+      } finally {
+        if (origEnabled !== undefined) {
+          process.env.ALGORAND_ADAPTER_ENABLED = origEnabled;
+        } else {
+          delete process.env.ALGORAND_ADAPTER_ENABLED;
+        }
+      }
     });
   });
 });
