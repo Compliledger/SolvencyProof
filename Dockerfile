@@ -36,20 +36,7 @@ COPY algorand/client ./algorand/client/
 COPY algorand/types ./algorand/types/
 
 # Create data directories
-RUN mkdir -p data/yellow_sessions data/output data/inclusion_proofs
-
-# Copy data files if they exist
-COPY backend/data ./data/ 2>/dev/null || true
-
-# Copy circuits build artifacts (pre-compiled locally)
-COPY backend/circuits/build ./circuits/build/ 2>/dev/null || true
-
-# Verify circuit artifacts exist (warning only, don't fail build)
-RUN test -f circuits/build/solvency_final.zkey && \
-    test -f circuits/build/solvency_js/solvency.wasm && \
-    test -f circuits/build/verification_key.json && \
-    echo "✓ ZK circuit artifacts found" || \
-    echo "⚠ WARNING: ZK circuit artifacts not found - proof generation will not work"
+RUN mkdir -p data/yellow_sessions data/output data/inclusion_proofs circuits/build
 
 # Set working directory to backend
 WORKDIR /app/backend/backend
