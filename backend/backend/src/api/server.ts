@@ -310,14 +310,32 @@ app.get("/api/liabilities/verify/:userId", async (req: Request, res: Response) =
 // GET /api/reserves - Get current reserves snapshot
 app.get("/api/reserves", (_req: Request, res: Response) => {
   try {
-    const snapshotPath = path.join(OUTPUT_DIR, "reserves_snapshot.json");
-
-    if (!fs.existsSync(snapshotPath)) {
-      return res.status(404).json({ error: "Reserves not scanned yet" });
+    const reservesPath = path.join(DATA_DIR, "reserves.json");
+    
+    if (!fs.existsSync(reservesPath)) {
+      return res.status(404).json({ error: "Reserves not configured yet" });
     }
 
-    const snapshot = JSON.parse(fs.readFileSync(snapshotPath, "utf-8"));
-    res.json({ snapshot });
+    const reserves = JSON.parse(fs.readFileSync(reservesPath, "utf-8"));
+    
+    // Calculate totals
+    let totalAmount = 0;
+    let liquidAmount = 0;
+    reserves.forEach((r: any) => {
+      totalAmount += r.amount || 0;
+      if (r.is_liquid) liquidAmount += r.amount || 0;
+    });
+
+    res.json({
+      addresses: [], // No blockchain addresses in this system
+      total_wei: totalAmount.toString(),
+      total_eth: (totalAmount / 1e18).toFixed(6),
+      liquid_wei: liquidAmount.toString(),
+      liquid_eth: (liquidAmount / 1e18).toFixed(6),
+      chain: "algorand", // Using Algorand, not Ethereum
+      epoch_id: "",
+      sources: reserves,
+    });
   } catch (err) {
     res.status(500).json({ error: "Failed to read reserves data" });
   }
@@ -472,11 +490,23 @@ app.post("/api/proof/submit-algorand", async (_req: Request, res: Response) => {
       }
     }
 
-    const result = execSync("npx tsx src/scripts/submit-to-algorand.ts", {
-      cwd: path.join(__dirname, "../.."),
-      encoding: "utf-8",
-      timeout: 120000,
-    });
+    console.log("[Submit Algorand] Submitting to Algorand...");
+    let result;
+    try {
+      result = execSync("npx tsx src/scripts/submit-to-algorand.ts", {
+        cwd: path.join(__dirname, "../.."),
+        encoding: "utf-8",
+        timeout: 120000,
+      });
+    } catch (submitErr: any) {
+      console.error("[Submit Algorand] Submission failed:", submitErr);
+      return res.status(500).json({
+        error: "Failed to submit to Algorand",
+        details: submitErr.message || String(submitErr),
+        stderr: submitErr.stderr || "",
+        stdout: submitErr.stdout || "",
+      });
+    }
 
     const submissionPath = path.join(OUTPUT_DIR, "algorand_submission.json");
     if (fs.existsSync(submissionPath)) {
