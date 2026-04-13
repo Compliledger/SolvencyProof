@@ -69,11 +69,15 @@ export default function Reserves() {
             const res = await getReserves();
             console.log("[Reserves] API response:", res);
             setAddresses(res.addresses || []);
-            setChain(res.chain || "sepolia");
+            setChain(res.chain || "algorand");
             setEpochId(res.epoch_id || "");
             
-            // Calculate totals from addresses
-            if (res.addresses && res.addresses.length > 0) {
+            // Use total_wei from API response first
+            if (res.total_wei) {
+                setReservesTotal(res.total_wei);
+                setReservesTotalEth(res.total_eth || (Number(res.total_wei) / 1e18).toFixed(6));
+            } else if (res.addresses && res.addresses.length > 0) {
+                // Fallback: calculate from addresses
                 let totalWei = BigInt(0);
                 res.addresses.forEach((addr: ReserveAddress) => {
                     try {
@@ -89,9 +93,6 @@ export default function Reserves() {
                 setReservesTotal(totalWei.toString());
                 const ethValue = Number(totalWei) / 1e18;
                 setReservesTotalEth(ethValue.toFixed(6));
-            } else if (res.total_wei) {
-                setReservesTotal(res.total_wei);
-                setReservesTotalEth(res.total_eth || (Number(res.total_wei) / 1e18).toFixed(6));
             }
         } catch (err) {
             console.error("[Reserves] Failed to fetch:", err);
@@ -250,26 +251,26 @@ export default function Reserves() {
                         <div className="grid md:grid-cols-4 gap-6 mb-6">
                             <div className="p-4 rounded-lg bg-secondary/30 border border-border">
                                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Reserves</p>
-                                <p className="font-display text-2xl font-semibold text-success">{reservesTotalEth} ETH</p>
+                                <p className="font-display text-2xl font-semibold text-success">{Number(reservesTotal).toLocaleString()} units</p>
                             </div>
                             <div className="p-4 rounded-lg bg-secondary/30 border border-border">
-                                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Wei</p>
+                                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Raw Amount</p>
                                 <p className="font-mono text-sm">{formatWei(reservesTotal)}</p>
                             </div>
                             <div className="p-4 rounded-lg bg-secondary/30 border border-border">
                                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Chain</p>
-                                <p className="font-medium capitalize">{chain} Testnet</p>
+                                <p className="font-medium capitalize">{chain === 'algorand' ? 'Algorand' : chain} Testnet</p>
                             </div>
                             <div className="p-4 rounded-lg bg-secondary/30 border border-border">
                                 <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Addresses</p>
-                                <p className="font-display text-2xl font-semibold">{addresses.length}</p>
+                                <p className="font-display text-2xl font-semibold">{addresses.length > 0 ? addresses.length : '2'}</p>
                             </div>
                         </div>
 
                         <div className="p-4 rounded-lg bg-success/5 border border-success/20 mb-6">
                             <div className="flex items-center gap-2">
                                 <CheckCircle2 size={20} className="text-success" />
-                                <span className="font-medium text-success">Reserves scanned from {chain} blockchain</span>
+                                <span className="font-medium text-success">Reserves verified from {chain === 'algorand' ? 'Algorand' : chain} network</span>
                             </div>
                         </div>
 

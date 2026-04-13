@@ -62,10 +62,14 @@ export default function ProofGenerator() {
                 
                 if (liabRes.root) {
                     setLiabilitiesRoot(liabRes.root);
+                    setTotalLiabilities(Number(liabRes.total) || 0);
                     setEpochId(liabRes.epochId || "");
                 }
                 
-                if (resRes.addresses) {
+                // Use total_wei from API first, fallback to calculating from addresses
+                if (resRes.total_wei) {
+                    setTotalReserves(resRes.total_wei);
+                } else if (resRes.addresses && resRes.addresses.length > 0) {
                     let total = BigInt(0);
                     resRes.addresses.forEach((addr: any) => {
                         try {

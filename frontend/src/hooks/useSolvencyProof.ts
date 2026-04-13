@@ -112,18 +112,24 @@ export function useSolvencyProof() {
         // Liabilities
         getLiabilities: () => api<{
             root: string;
+            total: string | number;
             epochId: string;
             leafCount: number;
             timestamp: number;
             tree: any;
         }>('/api/liabilities', undefined, CACHE_KEYS.LIABILITIES),
 
-        buildMerkleTree: () => api<{
-            success: boolean;
-            root: string;
-            totalLiabilities: number;
-            userCount: number;
-        }>('/api/liabilities/build', { method: 'POST' }),
+        buildMerkleTree: async () => {
+            const result = await api<{
+                success: boolean;
+                root: string;
+                totalLiabilities: number;
+                userCount: number;
+            }>('/api/liabilities/build', { method: 'POST' });
+            // Clear liabilities cache so next fetch gets fresh data
+            clearCache(CACHE_KEYS.LIABILITIES);
+            return result;
+        },
 
         verifyInclusion: (userId: string) => api<{
             success: boolean;
@@ -143,10 +149,14 @@ export function useSolvencyProof() {
             total_eth?: string;
         }>('/api/reserves', undefined, CACHE_KEYS.RESERVES),
 
-        scanReserves: () => api<{
-            success: boolean;
-            snapshot: { epoch_id: number; reserves_total_wei: string; chain: string };
-        }>('/api/reserves/scan', { method: 'POST' }),
+        scanReserves: async () => {
+            const result = await api<{
+                success: boolean;
+                snapshot: { epoch_id: number; reserves_total_wei: string; chain: string };
+            }>('/api/reserves/scan', { method: 'POST' });
+            clearCache(CACHE_KEYS.RESERVES);
+            return result;
+        },
 
         // Proof
         generateProof: () => api<{
