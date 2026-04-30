@@ -7,7 +7,7 @@
 // All routes call the registry-backed backend endpoints directly.
 // No Ethereum/contract fallback paths are retained.
 
-import { API_BASE_URL } from "./constants";
+import { API_BASE_URL, DEFAULT_ENTITY_ID } from "./constants";
 import type {
     SolvencyEpochState,
     EpochHistoryItem,
@@ -47,7 +47,8 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
  *   returns the default / single-entity state.
  */
 export async function getLatestEpoch(entityId?: string): Promise<SolvencyEpochState> {
-    const params = entityId ? `?entity_id=${encodeURIComponent(entityId)}` : "";
+    const eid = entityId || DEFAULT_ENTITY_ID;
+    const params = `?entity_id=${encodeURIComponent(eid)}`;
     return apiFetch<SolvencyEpochState>(`/api/epoch/latest${params}`);
 }
 
@@ -61,8 +62,9 @@ export async function getLatestEpoch(entityId?: string): Promise<SolvencyEpochSt
  * @param entityId - entity identifier
  * @param limit    - optional maximum number of epochs to return
  */
-export async function getEpochHistory(entityId: string, limit?: number): Promise<EpochHistoryItem[]> {
-    const params = new URLSearchParams({ entity_id: entityId });
+export async function getEpochHistory(entityId?: string, limit?: number): Promise<EpochHistoryItem[]> {
+    const eid = entityId || DEFAULT_ENTITY_ID;
+    const params = new URLSearchParams({ entity_id: eid });
     if (limit !== undefined && limit > 0) params.set("limit", String(limit));
     return apiFetch<EpochHistoryItem[]>(`/api/epoch/history?${params.toString()}`);
 }
@@ -104,7 +106,7 @@ export async function verifyUserInclusion(
     }
 
     return {
-        entity_id: entityId ?? "default",
+        entity_id: entityId ?? DEFAULT_ENTITY_ID,
         epoch_id: resolvedEpochId,
         liability_root: liabilityRoot,
         included: res.success,

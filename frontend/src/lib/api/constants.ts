@@ -3,6 +3,9 @@
 
 export const API_BASE_URL = 'https://solvency-proof-production.up.railway.app';
 
+/** Default entity ID for production deployment */
+export const DEFAULT_ENTITY_ID = 'compliledger-entity-01';
+
 export const API_ENDPOINTS = {
     // Health
     HEALTH: '/health',
