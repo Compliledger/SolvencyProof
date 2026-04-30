@@ -233,7 +233,7 @@ export default function Reserves() {
                     </div>
                 )}
 
-                {addresses.length === 0 && (
+                {addresses.length === 0 && reservesTotal === "0" && (
                     <div className="text-center py-12 text-muted-foreground">
                         <Wallet size={48} className="mx-auto mb-4 opacity-50" />
                         <p>No reserve addresses found. Click "Refresh Balances" to scan.</p>

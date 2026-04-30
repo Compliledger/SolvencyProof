@@ -41,11 +41,12 @@ export default function ProofGenerator() {
     const [proofData, setProofData] = useState<any>(null);
     const [publicSignals, setPublicSignals] = useState<string[]>([]);
     const [isSolvent, setIsSolvent] = useState<boolean | null>(null);
+    const [healthStatus, setHealthStatus] = useState<string>("");
     const [txHash, setTxHash] = useState<string>("");
     const [blockNumber, setBlockNumber] = useState<number | null>(null);
     const [generationTime, setGenerationTime] = useState<number>(0);
 
-    const { generateProof, submitProof, getLiabilities, getReserves, loading, error } = useSolvencyProof();
+    const { generateProof, submitProof, getLiabilities, getReserves, getHealth, loading, error } = useSolvencyProof();
 
     // Fetch current inputs
     const [liabilitiesRoot, setLiabilitiesRoot] = useState<string>("");
@@ -56,9 +57,18 @@ export default function ProofGenerator() {
     useEffect(() => {
         const fetchInputs = async () => {
             try {
-                const [liabRes, resRes] = await Promise.all([getLiabilities(), getReserves()]);
+                const [liabRes, resRes, healthRes] = await Promise.all([
+                    getLiabilities(),
+                    getReserves(),
+                    getHealth().catch(() => ({ health_status: "UNKNOWN" }))
+                ]);
                 console.log("[ProofGenerator] Liabilities:", liabRes);
                 console.log("[ProofGenerator] Reserves:", resRes);
+                console.log("[ProofGenerator] Health:", healthRes);
+                
+                if ((healthRes as any).health_status) {
+                    setHealthStatus((healthRes as any).health_status);
+                }
                 
                 if (liabRes.root) {
                     setLiabilitiesRoot(liabRes.root);
@@ -197,11 +207,23 @@ export default function ProofGenerator() {
                                 <h3 className="font-medium text-lg">Proof Generated Successfully!</h3>
                             </div>
 
-                            {/* Solvency Status */}
-                            <div className={`p-6 rounded-xl mb-6 text-center ${isSolvent ? "bg-success/10 border border-success/30" : "bg-destructive/10 border border-destructive/30"}`}>
-                                <p className="text-sm uppercase tracking-wider mb-2">Result</p>
-                                <p className={`text-3xl font-bold ${isSolvent ? "text-success" : "text-destructive"}`}>
-                                    {isSolvent ? "✅ SOLVENT" : "❌ INSOLVENT"}
+                            {/* Health Status */}
+                            <div className={`p-6 rounded-xl mb-6 text-center ${
+                                healthStatus === "HEALTHY" ? "bg-success/10 border border-success/30" :
+                                healthStatus === "LIQUIDITY_STRESSED" ? "bg-warning/10 border border-warning/30" :
+                                "bg-destructive/10 border border-destructive/30"
+                            }`}>
+                                <p className="text-sm uppercase tracking-wider mb-2">Health Status</p>
+                                <p className={`text-3xl font-bold ${
+                                    healthStatus === "HEALTHY" ? "text-success" :
+                                    healthStatus === "LIQUIDITY_STRESSED" ? "text-warning" :
+                                    "text-destructive"
+                                }`}>
+                                    {healthStatus === "HEALTHY" ? "✅ HEALTHY" :
+                                     healthStatus === "LIQUIDITY_STRESSED" ? "⚠️ LIQUIDITY STRESSED" :
+                                     healthStatus === "CAPITAL_DEFICIENT" ? "❌ CAPITAL DEFICIENT" :
+                                     healthStatus === "INSOLVENT" ? "❌ INSOLVENT" :
+                                     isSolvent ? "✅ SOLVENT" : "❌ INSOLVENT"}
                                 </p>
                             </div>
 

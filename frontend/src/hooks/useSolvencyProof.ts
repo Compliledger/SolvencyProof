@@ -107,7 +107,15 @@ export function useSolvencyProof() {
         error,
 
         // Health
-        getHealth: () => api<{ status: string; timestamp: string }>('/health', undefined, CACHE_KEYS.HEALTH),
+        getHealth: () => api<{ 
+            entity_id: string;
+            health_status: string;
+            is_healthy: boolean;
+            is_fresh: boolean;
+            valid_until: number;
+            timestamp: number;
+            source_type: string;
+        }>('/api/epoch/health?entity_id=compliledger-entity-01', undefined, CACHE_KEYS.HEALTH),
 
         // Liabilities
         getLiabilities: () => api<{
