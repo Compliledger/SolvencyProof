@@ -13,6 +13,16 @@ const CACHE_KEYS = {
     YELLOW_SESSIONS: 'solvency_yellow_sessions',
 };
 
+// Clear cache if BASE_URL changed (switching between local/production)
+const STORED_BASE_URL_KEY = 'solvency_base_url';
+const storedBaseUrl = localStorage.getItem(STORED_BASE_URL_KEY);
+if (storedBaseUrl && storedBaseUrl !== BASE_URL) {
+    console.log(`[CACHE] BASE_URL changed from ${storedBaseUrl} to ${BASE_URL}, clearing cache`);
+    Object.values(CACHE_KEYS).forEach(key => localStorage.removeItem(key));
+}
+localStorage.setItem(STORED_BASE_URL_KEY, BASE_URL);
+console.log(`[API] Using BASE_URL: ${BASE_URL}`);
+
 // Cache helpers
 function getCache<T>(key: string): T | null {
     try {
