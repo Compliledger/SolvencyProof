@@ -1,0 +1,678 @@
+#pragma version 8
+txn NumAppArgs
+int 0
+==
+bnz main_l12
+txna ApplicationArgs 0
+method "submit_epoch(string,string,string,string,string,string,uint64,uint64,uint64,bool,bool,uint8,uint64,uint64)void"
+==
+bnz main_l11
+txna ApplicationArgs 0
+method "get_latest_state(string)string"
+==
+bnz main_l10
+txna ApplicationArgs 0
+method "get_epoch_record(string,string)string"
+==
+bnz main_l9
+txna ApplicationArgs 0
+method "is_healthy(string)bool"
+==
+bnz main_l8
+txna ApplicationArgs 0
+method "get_health_status(string)uint8"
+==
+bnz main_l7
+err
+main_l7:
+txn OnCompletion
+int NoOp
+==
+txn ApplicationID
+int 0
+!=
+&&
+assert
+callsub gethealthstatuscaster_18
+int 1
+return
+main_l8:
+txn OnCompletion
+int NoOp
+==
+txn ApplicationID
+int 0
+!=
+&&
+assert
+callsub ishealthycaster_17
+int 1
+return
+main_l9:
+txn OnCompletion
+int NoOp
+==
+txn ApplicationID
+int 0
+!=
+&&
+assert
+callsub getepochrecordcaster_16
+int 1
+return
+main_l10:
+txn OnCompletion
+int NoOp
+==
+txn ApplicationID
+int 0
+!=
+&&
+assert
+callsub getlateststatecaster_15
+int 1
+return
+main_l11:
+txn OnCompletion
+int NoOp
+==
+txn ApplicationID
+int 0
+!=
+&&
+assert
+callsub submitepochcaster_14
+int 1
+return
+main_l12:
+txn OnCompletion
+int NoOp
+==
+bnz main_l22
+txn OnCompletion
+int OptIn
+==
+bnz main_l21
+txn OnCompletion
+int CloseOut
+==
+bnz main_l20
+txn OnCompletion
+int UpdateApplication
+==
+bnz main_l19
+txn OnCompletion
+int DeleteApplication
+==
+bnz main_l18
+err
+main_l18:
+int 0
+return
+main_l19:
+int 0
+return
+main_l20:
+int 0
+return
+main_l21:
+int 0
+return
+main_l22:
+txn ApplicationID
+int 0
+==
+assert
+int 1
+return
+
+// make_latest_key
+makelatestkey_0:
+proto 1 1
+byte "entity:"
+frame_dig -1
+concat
+byte ":latest"
+concat
+retsub
+
+// make_epoch_key
+makeepochkey_1:
+proto 2 1
+byte "entity:"
+frame_dig -2
+concat
+byte ":epoch:"
+concat
+frame_dig -1
+concat
+retsub
+
+// encode_str
+encodestr_2:
+proto 1 1
+frame_dig -1
+len
+itob
+extract 6 2
+frame_dig -1
+concat
+retsub
+
+// pack_state
+packstate_3:
+proto 16 1
+frame_dig -16
+callsub encodestr_2
+frame_dig -15
+callsub encodestr_2
+concat
+frame_dig -14
+callsub encodestr_2
+concat
+frame_dig -13
+callsub encodestr_2
+concat
+frame_dig -12
+callsub encodestr_2
+concat
+frame_dig -11
+callsub encodestr_2
+concat
+frame_dig -10
+itob
+concat
+frame_dig -9
+itob
+concat
+frame_dig -8
+itob
+concat
+frame_dig -7
+concat
+frame_dig -6
+concat
+frame_dig -5
+concat
+frame_dig -4
+itob
+concat
+frame_dig -3
+itob
+concat
+frame_dig -2
+concat
+frame_dig -1
+concat
+retsub
+
+// decode_string_len
+decodestringlen_4:
+proto 2 1
+frame_dig -2
+frame_dig -1
+int 2
+extract3
+btoi
+retsub
+
+// skip_string
+skipstring_5:
+proto 2 1
+frame_dig -1
+int 2
++
+frame_dig -2
+frame_dig -1
+callsub decodestringlen_4
++
+retsub
+
+// decode_uint64_at
+decodeuint64at_6:
+proto 2 1
+frame_dig -2
+frame_dig -1
+int 8
+extract3
+btoi
+retsub
+
+// decode_uint8_at
+decodeuint8at_7:
+proto 2 1
+frame_dig -2
+frame_dig -1
+int 1
+extract3
+btoi
+retsub
+
+// compute_fixed_offset
+computefixedoffset_8:
+proto 1 1
+frame_dig -1
+frame_dig -1
+frame_dig -1
+frame_dig -1
+frame_dig -1
+frame_dig -1
+int 0
+callsub skipstring_5
+callsub skipstring_5
+callsub skipstring_5
+callsub skipstring_5
+callsub skipstring_5
+callsub skipstring_5
+retsub
+
+// submit_epoch
+submitepoch_9:
+proto 14 0
+frame_dig -14
+extract 2 0
+frame_dig -13
+extract 2 0
+callsub makeepochkey_1
+box_get
+store 1
+store 0
+load 1
+!
+assert
+frame_dig -14
+extract 2 0
+frame_dig -13
+extract 2 0
+callsub makeepochkey_1
+frame_dig -14
+extract 2 0
+frame_dig -13
+extract 2 0
+frame_dig -12
+extract 2 0
+frame_dig -11
+extract 2 0
+frame_dig -10
+extract 2 0
+frame_dig -9
+extract 2 0
+frame_dig -8
+frame_dig -7
+frame_dig -6
+frame_dig -5
+bnz submitepoch_9_l23
+byte "\x00"
+submitepoch_9_l2:
+frame_dig -4
+bnz submitepoch_9_l22
+byte "\x00"
+submitepoch_9_l4:
+frame_dig -3
+itob
+extract 7 1
+frame_dig -2
+frame_dig -1
+frame_dig -5
+bnz submitepoch_9_l21
+byte "\x01"
+submitepoch_9_l6:
+frame_dig -4
+bnz submitepoch_9_l20
+byte "\x01"
+submitepoch_9_l8:
+callsub packstate_3
+box_put
+frame_dig -14
+extract 2 0
+callsub makelatestkey_0
+frame_dig -14
+extract 2 0
+frame_dig -13
+extract 2 0
+frame_dig -12
+extract 2 0
+frame_dig -11
+extract 2 0
+frame_dig -10
+extract 2 0
+frame_dig -9
+extract 2 0
+frame_dig -8
+frame_dig -7
+frame_dig -6
+frame_dig -5
+bnz submitepoch_9_l19
+byte "\x00"
+submitepoch_9_l10:
+frame_dig -4
+bnz submitepoch_9_l18
+byte "\x00"
+submitepoch_9_l12:
+frame_dig -3
+itob
+extract 7 1
+frame_dig -2
+frame_dig -1
+frame_dig -5
+bnz submitepoch_9_l17
+byte "\x01"
+submitepoch_9_l14:
+frame_dig -4
+bnz submitepoch_9_l16
+byte "\x01"
+b submitepoch_9_l24
+submitepoch_9_l16:
+byte "\x00"
+b submitepoch_9_l24
+submitepoch_9_l17:
+byte "\x00"
+b submitepoch_9_l14
+submitepoch_9_l18:
+byte "\x01"
+b submitepoch_9_l12
+submitepoch_9_l19:
+byte "\x01"
+b submitepoch_9_l10
+submitepoch_9_l20:
+byte "\x00"
+b submitepoch_9_l8
+submitepoch_9_l21:
+byte "\x00"
+b submitepoch_9_l6
+submitepoch_9_l22:
+byte "\x01"
+b submitepoch_9_l4
+submitepoch_9_l23:
+byte "\x01"
+b submitepoch_9_l2
+submitepoch_9_l24:
+callsub packstate_3
+box_put
+retsub
+
+// get_latest_state
+getlateststate_10:
+proto 1 1
+byte ""
+frame_dig -1
+extract 2 0
+callsub makelatestkey_0
+box_get
+store 3
+store 2
+load 3
+assert
+load 2
+frame_bury 0
+frame_dig 0
+len
+itob
+extract 6 0
+frame_dig 0
+concat
+frame_bury 0
+retsub
+
+// get_epoch_record
+getepochrecord_11:
+proto 2 1
+byte ""
+frame_dig -2
+extract 2 0
+frame_dig -1
+extract 2 0
+callsub makeepochkey_1
+box_get
+store 5
+store 4
+load 5
+assert
+load 4
+frame_bury 0
+frame_dig 0
+len
+itob
+extract 6 0
+frame_dig 0
+concat
+frame_bury 0
+retsub
+
+// is_healthy
+ishealthy_12:
+proto 1 1
+int 0
+frame_dig -1
+extract 2 0
+callsub makelatestkey_0
+box_get
+store 7
+store 6
+load 7
+bnz ishealthy_12_l2
+int 0
+!
+!
+frame_bury 0
+b ishealthy_12_l3
+ishealthy_12_l2:
+load 6
+store 8
+load 8
+callsub computefixedoffset_8
+store 9
+load 8
+load 9
+int 26
++
+callsub decodeuint8at_7
+int 1
+==
+global LatestTimestamp
+load 8
+load 9
+int 35
++
+callsub decodeuint64at_6
+<=
+&&
+!
+!
+frame_bury 0
+ishealthy_12_l3:
+retsub
+
+// get_health_status
+gethealthstatus_13:
+proto 1 1
+int 0
+frame_dig -1
+extract 2 0
+callsub makelatestkey_0
+box_get
+store 11
+store 10
+load 11
+bnz gethealthstatus_13_l2
+int 0
+frame_bury 0
+frame_dig 0
+int 256
+<
+assert
+b gethealthstatus_13_l5
+gethealthstatus_13_l2:
+load 10
+store 12
+load 12
+callsub computefixedoffset_8
+store 13
+global LatestTimestamp
+load 12
+load 13
+int 35
++
+callsub decodeuint64at_6
+>
+bnz gethealthstatus_13_l4
+load 12
+load 13
+int 26
++
+callsub decodeuint8at_7
+frame_bury 0
+frame_dig 0
+int 256
+<
+assert
+b gethealthstatus_13_l5
+gethealthstatus_13_l4:
+int 5
+frame_bury 0
+frame_dig 0
+int 256
+<
+assert
+gethealthstatus_13_l5:
+retsub
+
+// submit_epoch_caster
+submitepochcaster_14:
+proto 0 0
+byte ""
+dupn 5
+int 0
+dupn 7
+txna ApplicationArgs 1
+frame_bury 0
+txna ApplicationArgs 2
+frame_bury 1
+txna ApplicationArgs 3
+frame_bury 2
+txna ApplicationArgs 4
+frame_bury 3
+txna ApplicationArgs 5
+frame_bury 4
+txna ApplicationArgs 6
+frame_bury 5
+txna ApplicationArgs 7
+btoi
+frame_bury 6
+txna ApplicationArgs 8
+btoi
+frame_bury 7
+txna ApplicationArgs 9
+btoi
+frame_bury 8
+txna ApplicationArgs 10
+int 0
+int 8
+*
+getbit
+frame_bury 9
+txna ApplicationArgs 11
+int 0
+int 8
+*
+getbit
+frame_bury 10
+txna ApplicationArgs 12
+int 0
+getbyte
+frame_bury 11
+txna ApplicationArgs 13
+btoi
+frame_bury 12
+txna ApplicationArgs 14
+btoi
+frame_bury 13
+frame_dig 0
+frame_dig 1
+frame_dig 2
+frame_dig 3
+frame_dig 4
+frame_dig 5
+frame_dig 6
+frame_dig 7
+frame_dig 8
+frame_dig 9
+frame_dig 10
+frame_dig 11
+frame_dig 12
+frame_dig 13
+callsub submitepoch_9
+retsub
+
+// get_latest_state_caster
+getlateststatecaster_15:
+proto 0 0
+byte ""
+dup
+txna ApplicationArgs 1
+frame_bury 1
+frame_dig 1
+callsub getlateststate_10
+frame_bury 0
+byte 0x151f7c75
+frame_dig 0
+concat
+log
+retsub
+
+// get_epoch_record_caster
+getepochrecordcaster_16:
+proto 0 0
+byte ""
+dupn 2
+txna ApplicationArgs 1
+frame_bury 1
+txna ApplicationArgs 2
+frame_bury 2
+frame_dig 1
+frame_dig 2
+callsub getepochrecord_11
+frame_bury 0
+byte 0x151f7c75
+frame_dig 0
+concat
+log
+retsub
+
+// is_healthy_caster
+ishealthycaster_17:
+proto 0 0
+int 0
+byte ""
+txna ApplicationArgs 1
+frame_bury 1
+frame_dig 1
+callsub ishealthy_12
+frame_bury 0
+byte 0x151f7c75
+byte 0x00
+int 0
+frame_dig 0
+setbit
+concat
+log
+retsub
+
+// get_health_status_caster
+gethealthstatuscaster_18:
+proto 0 0
+int 0
+byte ""
+txna ApplicationArgs 1
+frame_bury 1
+frame_dig 1
+callsub gethealthstatus_13
+frame_bury 0
+byte 0x151f7c75
+byte 0x00
+int 0
+frame_dig 0
+setbyte
+concat
+log
+retsub

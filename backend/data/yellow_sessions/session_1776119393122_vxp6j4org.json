@@ -1,0 +1,25 @@
+{
+  "id": "session_1776119393122_vxp6j4org",
+  "channelId": "0x84bc4a296be6a45e27b6836ff99c9206ef51c8e87c35acd9ed52283145f6a800",
+  "participants": [
+    "aa",
+    "bb"
+  ],
+  "allocations": {
+    "aa": "300000",
+    "bb": "400000"
+  },
+  "nonce": 1,
+  "status": "open",
+  "stateHash": "0xbe5d5e2753d4fd1fbc8de226052bd3535852e876351c20e72439dd7488405340",
+  "signatures": {
+    "operator": "0x8f3b4126beba263c50bc16c039b09c8f275bb187dcd595b656131bf689454926"
+  },
+  "createdAt": "2026-04-13T22:29:53.124Z",
+  "updatedAt": "2026-04-13T22:30:14.897Z",
+  "metadata": {
+    "version": 1,
+    "turnNum": 1,
+    "appData": ""
+  }
+}

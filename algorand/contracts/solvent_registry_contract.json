@@ -1,0 +1,127 @@
+{
+  "name": "SolventRegistry",
+  "methods": [
+    {
+      "name": "submit_epoch",
+      "args": [
+        {
+          "type": "string",
+          "name": "entity_id"
+        },
+        {
+          "type": "string",
+          "name": "epoch_id"
+        },
+        {
+          "type": "string",
+          "name": "liability_root"
+        },
+        {
+          "type": "string",
+          "name": "reserve_root"
+        },
+        {
+          "type": "string",
+          "name": "reserve_snapshot_hash"
+        },
+        {
+          "type": "string",
+          "name": "proof_hash"
+        },
+        {
+          "type": "uint64",
+          "name": "reserves_total"
+        },
+        {
+          "type": "uint64",
+          "name": "liquid_assets_total"
+        },
+        {
+          "type": "uint64",
+          "name": "near_term_liabilities_total"
+        },
+        {
+          "type": "bool",
+          "name": "capital_backed"
+        },
+        {
+          "type": "bool",
+          "name": "liquidity_ready"
+        },
+        {
+          "type": "uint8",
+          "name": "health_status"
+        },
+        {
+          "type": "uint64",
+          "name": "timestamp"
+        },
+        {
+          "type": "uint64",
+          "name": "valid_until"
+        }
+      ],
+      "returns": {
+        "type": "void"
+      },
+      "desc": "Stores a new epoch record for the given entity.\nRules enforced on-chain:   - Epoch uniqueness: if a box for (entity_id, epoch_id) already exists,     the transaction is rejected.   - Flag derivation:       insolvency_flag       = NOT capital_backed       liquidity_stress_flag = NOT liquidity_ready Both the epoch-specific box and the entity's latest-state box are written."
+    },
+    {
+      "name": "get_latest_state",
+      "args": [
+        {
+          "type": "string",
+          "name": "entity_id"
+        }
+      ],
+      "returns": {
+        "type": "string"
+      },
+      "desc": "Returns the raw encoded latest-state bytes for the entity.\nThe TypeScript client (registry_client.ts :: decodeState) decodes these bytes. Aborts if no state has been submitted for the entity."
+    },
+    {
+      "name": "get_epoch_record",
+      "args": [
+        {
+          "type": "string",
+          "name": "entity_id"
+        },
+        {
+          "type": "string",
+          "name": "epoch_id"
+        }
+      ],
+      "returns": {
+        "type": "string"
+      },
+      "desc": "Returns the raw encoded bytes for a specific historical epoch record.\nAborts if the epoch has not been submitted."
+    },
+    {
+      "name": "is_healthy",
+      "args": [
+        {
+          "type": "string",
+          "name": "entity_id"
+        }
+      ],
+      "returns": {
+        "type": "bool"
+      },
+      "desc": "Returns true iff:\n- A latest state exists for the entity   - health_status == HEALTHY (1)   - Global.latest_timestamp <= valid_until  (epoch has not expired)"
+    },
+    {
+      "name": "get_health_status",
+      "args": [
+        {
+          "type": "string",
+          "name": "entity_id"
+        }
+      ],
+      "returns": {
+        "type": "uint8"
+      },
+      "desc": "Returns the numeric health_status for the entity's latest state.\nReturns EXPIRED (5) if the validity window has passed. Returns UNKNOWN (0) if no state has been submitted."
+    }
+  ],
+  "networks": {}
+}

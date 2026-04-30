@@ -1,0 +1,25 @@
+{
+  "id": "session_1776191701902_pw6ew5kp2",
+  "channelId": "0xb963c73d4a732b39d24a6ef0b2d4576dabc7253f7cc137631201aabf70b59c54",
+  "participants": [
+    "sarthak",
+    "himanshi"
+  ],
+  "allocations": {
+    "sarthak": "150000000",
+    "himanshi": "150000000"
+  },
+  "nonce": 2,
+  "status": "open",
+  "stateHash": "0xb7040255a25a7b70a7b3ce84725e024d2f23a65927e925290dd0c37c3ece8eab",
+  "signatures": {
+    "operator": "0x05cc9eb11972bc8b227599d5ff2c1f565657483d0d1442e6d84078822727180a"
+  },
+  "createdAt": "2026-04-14T18:35:01.903Z",
+  "updatedAt": "2026-04-30T09:42:52.626Z",
+  "metadata": {
+    "version": 1,
+    "turnNum": 2,
+    "appData": ""
+  }
+}

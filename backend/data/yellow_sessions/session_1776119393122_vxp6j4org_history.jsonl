@@ -1,0 +1,2 @@
+{"timestamp":"2026-04-13T22:29:53.129Z","nonce":0,"stateHash":"0x3e86543522ba2aa0e7640d77e1970d3ac97b5e9952adefe72e0a8cc7d14d2e90","allocations":{},"status":"open"}
+{"timestamp":"2026-04-13T22:30:14.901Z","nonce":1,"stateHash":"0xbe5d5e2753d4fd1fbc8de226052bd3535852e876351c20e72439dd7488405340","allocations":{"aa":"300000","bb":"400000"},"status":"open"}

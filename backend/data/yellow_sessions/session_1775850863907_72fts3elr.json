@@ -1,0 +1,26 @@
+{
+  "id": "session_1775850863907_72fts3elr",
+  "channelId": "0x9c25ff0b292edbe0d6bac5ebe4ee1d6996a3a73db895c3df5785adb886199871",
+  "participants": [
+    "trader_a",
+    "trader_b"
+  ],
+  "allocations": {
+    "trader_a": "10000",
+    "trader_b": "5000"
+  },
+  "nonce": 2,
+  "status": "closed",
+  "stateHash": "0xf969f0280e925252353b394182d379d5238d393947eb22998524542a63f4b1eb",
+  "signatures": {
+    "operator": "0xc522e332e1a8ff05e148d74db65c67e4b0e912d2abe1f8aeed301e84ad7e99ad"
+  },
+  "createdAt": "2026-04-10T19:54:23.908Z",
+  "updatedAt": "2026-04-10T19:54:23.921Z",
+  "metadata": {
+    "version": 1,
+    "turnNum": 1,
+    "appData": ""
+  },
+  "closedAt": "2026-04-10T19:54:23.921Z"
+}

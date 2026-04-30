@@ -20,15 +20,15 @@
       "policy_lineage": "GLOBAL/1.0.0",
       "rule_snapshot_hash": "0x238d0ef1e9c0bc85b92f8d22623364a56c3df0c4d116bd65b69c5e7c9f313fe0"
     },
-    "epoch_id": 492948,
+    "epoch_id": 493762,
     "marketproof_status": "UNKNOWN"
   },
   "reason_codes": [
     "CAPITAL_BACKED",
     "NOT_LIQUIDITY_READY"
   ],
-  "timestamp": 1774613362,
-  "bundle_hash": "0xa2d7caf9430e3aae5a03f37dff07bed96ba96ccf1c1badab58db6e4c58fd9a00",
+  "timestamp": 1777544746,
+  "bundle_hash": "0xeaabd65ad685c2c24b31b9be7c25e238dd98dbbe90a95efd005229e2f72a3688",
   "anchor_metadata": {
     "anchored": false,
     "network": "",

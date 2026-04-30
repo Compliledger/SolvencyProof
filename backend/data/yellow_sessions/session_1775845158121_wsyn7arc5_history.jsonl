@@ -1,0 +1,3 @@
+{"timestamp":"2026-04-10T18:19:18.122Z","nonce":0,"stateHash":"0x1b5aa792b64d7619de9ae18e387a169adee062a3b870b8c37b2092047172efb4","allocations":{"trader_a":"0","trader_b":"0"},"status":"open"}
+{"timestamp":"2026-04-10T18:19:18.127Z","nonce":1,"stateHash":"0x442d41f719f9a7d0dbc69ff9d2f9d7afd80b3a6a58e934ec02f28ab8f1bf55a8","allocations":{"trader_a":"10000","trader_b":"5000"},"status":"open"}
+{"timestamp":"2026-04-10T18:19:18.138Z","nonce":2,"stateHash":"0x78f3b4e0c74efef035a2859ec12ebf693deb898c504695533f883aa32546d68c","allocations":{"trader_a":"10000","trader_b":"5000"},"status":"closed"}

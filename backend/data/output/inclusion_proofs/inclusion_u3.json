@@ -1,0 +1,10 @@
+{
+  "userId": "u3",
+  "balance": "200000",
+  "leafHash": "0x53ee0af7d26110f205e1b5b7f002d048ebe217d6614a0c12966132fd96053a25",
+  "proof": [
+    "0xc4c6f84bf3fba2797a31df40fd7c836a255365f94caaf4e61fdb05b741c4d100"
+  ],
+  "index": 2,
+  "root": "0xd8c98325f10f9d8a69e6206ad29abc2767663eac54f5fff5d52ec3f36d007402"
+}

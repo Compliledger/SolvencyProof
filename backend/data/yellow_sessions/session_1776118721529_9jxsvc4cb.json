@@ -1,0 +1,25 @@
+{
+  "id": "session_1776118721529_9jxsvc4cb",
+  "channelId": "0x2a309c210744cbc74c2fa6c05bebcd4d6a5b58988db66abdee93cdd34661b975",
+  "participants": [
+    "aa",
+    "b"
+  ],
+  "allocations": {
+    "aa": "100000",
+    "b": "100000"
+  },
+  "nonce": 1,
+  "status": "open",
+  "stateHash": "0xc0f6e7e14e68100599d9a9f1edabdbf33e6ab3cd7bdfa18fddc88874119367e0",
+  "signatures": {
+    "operator": "0xda23571148685a854efa4595be2d94b73f01f4292deedc926145a55703a8fb16"
+  },
+  "createdAt": "2026-04-13T22:18:41.530Z",
+  "updatedAt": "2026-04-13T22:19:05.423Z",
+  "metadata": {
+    "version": 1,
+    "turnNum": 1,
+    "appData": ""
+  }
+}

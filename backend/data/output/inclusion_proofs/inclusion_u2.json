@@ -1,0 +1,11 @@
+{
+  "userId": "u2",
+  "balance": "300000",
+  "leafHash": "0x4a27a65f02707b445ab7f94b86819ed90985ab1103f68384431ede2a6cf91968",
+  "proof": [
+    "0x09e7bc8d46fe59136033fc1e94244ca402bc9eab5be0301056fad110a68b01b7",
+    "0x53ee0af7d26110f205e1b5b7f002d048ebe217d6614a0c12966132fd96053a25"
+  ],
+  "index": 1,
+  "root": "0xd8c98325f10f9d8a69e6206ad29abc2767663eac54f5fff5d52ec3f36d007402"
+}

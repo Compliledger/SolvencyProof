@@ -1,0 +1,26 @@
+{
+  "id": "session_1775848939877_r5xorcr20",
+  "channelId": "0x039c04b6c37eaaac369b671af4f18df43330c4a4c6a0a4310eda68d139915d3c",
+  "participants": [
+    "trader_a",
+    "trader_b"
+  ],
+  "allocations": {
+    "trader_a": "10000",
+    "trader_b": "5000"
+  },
+  "nonce": 2,
+  "status": "closed",
+  "stateHash": "0x716ee8d92228a0a1521f6e12dd1f375f6675bacf990e25c320d89f5c6bdcf75d",
+  "signatures": {
+    "operator": "0x8a279ce1a02a43d08854c38068689d68e5d3327ce038c02ae3c551171d3f20cb"
+  },
+  "createdAt": "2026-04-10T19:22:19.877Z",
+  "updatedAt": "2026-04-10T19:22:19.889Z",
+  "metadata": {
+    "version": 1,
+    "turnNum": 1,
+    "appData": ""
+  },
+  "closedAt": "2026-04-10T19:22:19.889Z"
+}

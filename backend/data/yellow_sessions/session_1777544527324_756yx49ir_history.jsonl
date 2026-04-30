@@ -1,0 +1,2 @@
+{"timestamp":"2026-04-30T10:22:07.330Z","nonce":0,"stateHash":"0x1461b358193951c1308e060b78d5514a6064044b46107b05276f4eb11f2a0631","allocations":{},"status":"open"}
+{"timestamp":"2026-04-30T10:23:12.920Z","nonce":1,"stateHash":"0xd31318c2560398cc4139b1121a5c49cba9da4d6c5851734dc88ee31c127cd2d9","allocations":{"alice":"15000000","bob":"15000000"},"status":"open"}

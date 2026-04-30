@@ -1,0 +1,4 @@
+{"timestamp":"2026-04-10T18:18:51.917Z","nonce":0,"stateHash":"0x22325ef7e8bde5c9cf4f2bd7f135883a489c9c9e43c0e2043bcf30529cfe9c3b","allocations":{"alice":"0","bob":"0","charlie":"0"},"status":"open"}
+{"timestamp":"2026-04-10T18:18:51.931Z","nonce":1,"stateHash":"0x31422f1630d6e43ded154f464116b2d82f5e56b68081fbfbec7703d27c8da5b8","allocations":{"alice":"1500","bob":"2500","charlie":"500"},"status":"open"}
+{"timestamp":"2026-04-10T18:18:51.935Z","nonce":2,"stateHash":"0xda1ae8baa2ed6f8d23672278919a1a46e740eb0b4042d95c0b4fb38342cb6b25","allocations":{"alice":"2000","bob":"2500","charlie":"500"},"status":"open"}
+{"timestamp":"2026-04-10T18:18:51.946Z","nonce":3,"stateHash":"0x07dd8bfb17caca900c15525e392233502008e187f31be2adeec7da5283bed670","allocations":{"alice":"2000","bob":"2500","charlie":"500"},"status":"closed"}

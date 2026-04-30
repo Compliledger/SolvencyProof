@@ -1,0 +1,3 @@
+{"timestamp":"2026-04-14T18:35:01.909Z","nonce":0,"stateHash":"0x587fd1c25791eb7914d476d08409e521fddf5622a9d5ed7b391571ce4a558036","allocations":{},"status":"open"}
+{"timestamp":"2026-04-14T18:36:13.917Z","nonce":1,"stateHash":"0xa56a1e7242dc916b96b03a1fddb545ab3bdae282e38cbb41c5e09c6555af69b0","allocations":{"sarthak":"150000000","himanshi":"150000000"},"status":"open"}
+{"timestamp":"2026-04-30T09:42:52.632Z","nonce":2,"stateHash":"0xb7040255a25a7b70a7b3ce84725e024d2f23a65927e925290dd0c37c3ece8eab","allocations":{"sarthak":"150000000","himanshi":"150000000"},"status":"open"}

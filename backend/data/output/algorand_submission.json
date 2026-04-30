@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "tx_id": "KLV2HTU7DVPJULH5D7G5R372WBWEGWMZMQLDPDKCLH6U2HKIEPPA",
+  "app_id": "758634127",
+  "entity_id": "compliledger-entity-01",
+  "epoch_id": "493762",
+  "health_status": "LIQUIDITY_STRESSED",
+  "submitted_at": "2026-04-30T10:25:55.751Z",
+  "network": "testnet"
+}
