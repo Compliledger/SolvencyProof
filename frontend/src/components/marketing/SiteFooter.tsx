@@ -1,4 +1,4 @@
-import logo from "@/assets/solvencyproof-logo.png";
+const logo = "/Logo.jpg";
 
 type Props = {
   onNavigate: (to: string) => void;
@@ -35,11 +35,15 @@ export function SiteFooter({ onNavigate }: Props) {
               className="flex items-center gap-3 group"
               onClick={() => onNavigate("/")}
             >
-              <img
-                src={logo}
-                alt="SolvencyProof"
-                className="h-7 w-auto"
-              />
+              <div
+                className="flex-shrink-0 w-12 h-12 rounded-full bg-[#2a2a2a] border-2 border-[#D0D0D0] flex items-center justify-center overflow-hidden"
+              >
+                <img
+                  src={logo}
+                  alt="SolvencyProof"
+                  className="w-full h-full object-contain"
+                />
+              </div>
               <span className="font-display text-sm font-medium">SolvencyProof</span>
             </button>
 
